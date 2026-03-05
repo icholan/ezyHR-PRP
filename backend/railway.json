@@ -3,10 +3,9 @@
     "build": {
         "builder": "DOCKERFILE",
         "dockerfilePath": "Dockerfile",
-        "context": ".."
+        "context": "."
     },
     "deploy": {
-        "startCommand": "./scripts/start.sh",
         "restartPolicyType": "ON_FAILURE",
         "numReplicas": 1
     }
