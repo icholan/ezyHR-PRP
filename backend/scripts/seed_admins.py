@@ -64,6 +64,10 @@ async def seed_admins_only():
                 tenant_id=tenant.id,
                 name="Singapore HQ",
                 uen="202412345G",
+                gst_registered=False,
+                payroll_cutoff_day=31,
+                payment_day=7,
+                work_week_hours=44.00,
                 is_active=True
             )
             session.add(entity)
