@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y \
     magic-tools \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ .
 
 # Make start script executable
 RUN chmod +x scripts/start.sh
