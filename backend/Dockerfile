@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
-    magic-tools \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
