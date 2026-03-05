@@ -1,20 +1,6 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: hrms_db
-    restart: always
-    environment:
-      POSTGRES_USER: hrms_user
-      POSTGRES_PASSWORD: hrms_password
-      POSTGRES_DB: hrms_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - hrms_db_data:/var/lib/postgresql/data
-      - ./hrms_complete_schema_v2.sql:/docker-entrypoint-initdb.d/init.sql
-
   redis:
     image: redis:7-alpine
     container_name: hrms_redis
@@ -55,5 +41,4 @@ services:
       - ./backend:/app
 
 volumes:
-  hrms_db_data:
   hrms_redis_data:
