@@ -2,7 +2,7 @@
 set -e
 
 echo "Checking database connectivity..."
-python scripts/wait_for_db.py
+python wait_for_db.py
 
 echo "Running Alembic migrations..."
 alembic upgrade head
