@@ -17,9 +17,9 @@ services:
     container_name: hrms_backend
     depends_on:
       - redis
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://hrms_user:hrms_password@db:5432/hrms_db}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - APP_ENV=development
     volumes:
       - ./backend:/app
@@ -34,9 +34,10 @@ services:
     command: celery -A app.tasks.worker worker --loglevel=info
     depends_on:
       - redis
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://hrms_user:hrms_password@db:5432/hrms_db}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - APP_ENV=development
     volumes:
       - ./backend:/app
 

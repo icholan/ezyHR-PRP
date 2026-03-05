@@ -1,6 +1,7 @@
 import os
 import time
 import asyncio
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from dotenv import load_dotenv
 
@@ -21,12 +22,15 @@ async def wait_for_db(retries=5, delay=2):
     for i in range(retries):
         try:
             async with engine.connect() as conn:
-                await conn.execute("SELECT 1")
+                await conn.execute(text("SELECT 1"))
                 print("Database is ready!")
                 await engine.dispose()
                 return True
         except Exception as e:
-            print(f"Database not ready (attempt {i+1}/{retries}): {e}")
+            print(f"Database not ready (attempt {i+1}/{retries}).")
+            print(f"Error details: {type(e).__name__}: {str(e)}")
+            if "ssl" in str(e).lower():
+                print("HINT: Database might require SSL. Try adding '?sslmode=require' to your DATABASE_URL.")
             if i < retries - 1:
                 await asyncio.sleep(delay)
     
