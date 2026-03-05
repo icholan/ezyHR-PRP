@@ -39,11 +39,22 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Prioritize DATABASE_URL from environment for containerized deployments
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        # Alembic (SQLAlchemy sync) uses 'postgresql://' scheme
+        # but ensure we don't accidentally pass an asyncpg url if present
+        if "+asyncpg" in db_url:
+            db_url = db_url.replace("+asyncpg", "")
+        
+        from sqlalchemy import create_engine
+        connectable = create_engine(db_url, poolclass=pool.NullPool)
+    else:
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+        )
 
     with connectable.connect() as connection:
         context.configure(
