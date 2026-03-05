@@ -1,0 +1,47 @@
+
+For future schema changes, you can run:
+---------------------------------------
+cd backend
+alembic revision --autogenerate -m "description"   # Generate migration
+alembic upgrade head                                 # Apply migration
+
+
+------------------
+
+cd /Users/cholan/MyProjects/ReactJS/mathi/ezyHR-PRP/backend
+# e.g. uvicorn app.main:app --reload  (or whatever your usual start command is)
+
+hrmanager@acme.com
+Manager@123
+
+
+
+
+www.zing5hr.com
+
+www 
+CNAME
+9sviqw14.up.railway.app
+
+
+
+TXT
+_railway-verify.www
+railway-verify=18dbd483414c1ef4d478a066c2dcbe3cd7c023bcf9e5ee3c51ea1d678c365354
+
+
+
+www 
+CNAME
+ipm616t7.up.railway.app
+
+TXT
+_railway-verify.www
+railway-verify=8a547822c4e53ccf5837984d19c963c9771bf0f6487b1f2fd446cab10f38b2b3
+
+
+
+- a workmen going work for 9am to 6pm shift
+- but he worked until next day 9am
+- between this hours he falls Break (Mins) for lunch,dinner and break fast 
+- in this how habdle 3 meal breaks 

@@ -1,0 +1,66 @@
+# Task: Analyze HRMS Business Flow and Schema
+
+- [x] Analyze [hrms_complete_schema_v2.sql](file:///Users/cholan/MyProjects/ReactJS/mathi/ezyHR-PRP/hrms_complete_schema_v2.sql)
+- [x] Extract and analyze [hrms_business_flow_v2.docx](file:///Users/cholan/MyProjects/ReactJS/mathi/ezyHR-PRP/hrms_business_flow_v2.docx)
+- [x] Synthesize initial insights
+- [x] Deep dive into Tech Stack
+- [x] Deep dive on CPF Calculation
+- [x] Deep dive on OT Engine
+- [x] Deep dive on AI Audit Flags
+- [x] Deep dive on Platform Admin Tools
+- [x] Deep dive on Leave Management
+- [x] Deep dive on Time & Attendance Logic
+- [x] Create Implementation Plan
+- [x] Document Environment Variables and Build Order
+- [x] Phase 1: Project Initialization & Infrastructure [x]
+- [x] Phase 5: Reporting & Statutory Submissions [x]
+    - [x] Research CPF91 FTP & IR8A XML Formats
+    - [x] Implement CPF91 Generator Service
+    - [x] Implement IR8A Generator Service
+    - [x] Create Reporting API Endpoints
+    - [x] Add Frontend Reporting Download UI
+- [x] Phase 8: Employee Management & Profile System [x]
+    - [x] Create Person & Employment Models
+    - [x] Implement Employee Pydantic Schemas
+    - [x] Build EmployeeService (Encryption/Masking)
+    - [x] Create Employee API Router
+    - [x] Implement Frontend Employee List UI
+    - [x] Create "Add Employee" Multi-step Form [x]
+    - [x] Database Seeding & Dev Environment Setup [x]
+    - [x] Implement Employee Detail View (Profile) [x]
+- [x] Phase 9: Payroll Management & AI Audit UI [x]
+    - [x] Create Payroll Dashboard (Monthly Overview)
+    - [x] Implement Payroll Run Execution UI
+    - [x] Build AI Audit Result View (Flags & Anomaly Detection)
+    - [x] Comprehensive Database Seeding for Payroll Flow
+- [x] Phase 3: Human Capital & Statutory Engines [x]
+    - [x] Implement AES-256 Encryption Service
+    - [x] Implement CPF Calculation Engine
+    - [x] Implement OT Calculation Engine
+    - [x] Implement SHG/SDL/FWL Logic
+- [x] Phase 4: Workflow Modules [x]
+    - [x] Implement Core Payroll Calculation Logic
+    - [x] Implement Payroll Run Management API
+    - [x] Implement Bulk Payroll Processing
+    - [x] Implement AI Audit Integration
+- [x] Phase 6: Frontend Development [x]
+    - [x] Initialize Vite/React + TypeScript Project
+    - [x] Set up Folder Structure & Core Layouts
+    - [x] Implement Premium Login Page (MFA Support)
+    - [x] Implement Dashboard Overview Content
+    - [x] Implement Admin Dashboard Shell
+    - [x] Implement Tenant Portal Shell
+- [x] Phase 7: Frontend-Backend Integration [x]
+    - [x] Set up Axios Client & Interceptors
+    - [x] Implement Auth Store (Zustand)
+    - [x] Connect Login & MFA Endpoints
+    - [x] Implement Protected Route Guard
+    - [x] Add Persistence for JWT
+- [x] Phase 2: Authentication & RBAC [x]
+    - [x] Implement Security Utilities (JWT, Hashing, MFA)
+    - [x] Create Auth Schemas
+    - [x] Implement Platform Admin Auth Router
+    - [x] Implement Admin Role Dependencies
+    - [x] Implement Tenant User Auth Router
+    - [x] Implement Tenant RBAC Dependencies
+    - [x] Implement Impersonation Support
