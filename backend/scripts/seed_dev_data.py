@@ -381,23 +381,57 @@ async def seed_all():
             
             print("✅ Shift, Roster and Attendance seeded.")
 
-            # 8. Seed Leave Data (Phase 11)
+            # 8. Seed Leave Data (Phase 11: MOM Statutory Defaults)
+            # AL: Annual Leave
             annual_leave = LeaveType(
-                entity_id=entity.id,
-                name="Annual Leave",
-                code="ANNUAL",
-                is_paid=True,
-                is_statutory=True
+                entity_id=entity.id, name="Annual Leave", code="AL", 
+                is_paid=True, is_statutory=True
             )
-            sick_leave = LeaveType(
-                entity_id=entity.id,
-                name="Sick Leave",
-                code="SICK",
-                is_paid=True,
-                is_statutory=True
+            # ML: Medical Leave (Outpatient)
+            medical_leave = LeaveType(
+                entity_id=entity.id, name="Medical (Outpatient)", code="ML", 
+                is_paid=True, is_statutory=True
             )
-            session.add(annual_leave)
-            session.add(sick_leave)
+            # HL: Hospitalisation Leave
+            hosp_leave = LeaveType(
+                entity_id=entity.id, name="Hospitalisation", code="HL", 
+                is_paid=True, is_statutory=True
+            )
+            # CL: Childcare Leave
+            childcare_leave = LeaveType(
+                entity_id=entity.id, name="Childcare Leave", code="CL", 
+                is_paid=True, is_statutory=True
+            )
+            # ECL: Extended Childcare Leave
+            ext_childcare_leave = LeaveType(
+                entity_id=entity.id, name="Extended Childcare", code="ECL", 
+                is_paid=True, is_statutory=True
+            )
+            # MAT: Maternity Leave
+            mat_leave = LeaveType(
+                entity_id=entity.id, name="Maternity (GPML)", code="MAT", 
+                is_paid=True, is_statutory=True
+            )
+            # PAT: Paternity Leave
+            pat_leave = LeaveType(
+                entity_id=entity.id, name="Paternity (GPPL)", code="PAT", 
+                is_paid=True, is_statutory=True
+            )
+            # SPL: Shared Parental Leave
+            spl_leave = LeaveType(
+                entity_id=entity.id, name="Shared Parental", code="SPL", 
+                is_paid=True, is_statutory=True
+            )
+            # UPL: Unpaid Infant Care
+            upl_leave = LeaveType(
+                entity_id=entity.id, name="Unpaid Infant Care", code="UPL", 
+                is_paid=False, is_statutory=True
+            )
+
+            session.add_all([
+                annual_leave, medical_leave, hosp_leave, childcare_leave, 
+                ext_childcare_leave, mat_leave, pat_leave, spl_leave, upl_leave
+            ])
             await session.flush()
 
             # Entitlement for Primary Employee
