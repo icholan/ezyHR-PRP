@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-from app.models.employment import Person, Employment, BankAccount, Department
+from app.models.employment import Person, Employment, BankAccount, Department, Group, Grade
 from app.schemas.employee import (
     EmployeeFullCreate, EmployeeSummary, EmployeeFullUpdate,
     EmployeeDetail, EmployeeDetailPerson, EmployeeDetailEmployment, EmployeeDetailBank
@@ -10,6 +10,8 @@ from app.core.security.encryption import encryptor
 from datetime import date
 from app.services.leave import LeaveService
 import uuid
+from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException
 
 
 class EmployeeService:
@@ -32,10 +34,17 @@ class EmployeeService:
         person = Person(
             **person_dict,
             tenant_id=tenant_id,
-            nric_fin=encryptor.encrypt(raw_nric)
+            nric_fin=encryptor.encrypt(raw_nric),
+            nric_fin_hash=encryptor.get_hash(raw_nric)
         )
         self.db.add(person)
-        await self.db.flush() # Get person.id
+        try:
+            await self.db.flush() # Get person.id
+        except IntegrityError as e:
+            await self.db.rollback()
+            if "uq_persons_nric" in str(e):
+                raise HTTPException(status_code=400, detail="NRIC/FIN already exists for this tenant.")
+            raise e
 
         # 2. Create Employment
         emp_dict = data.employment.model_dump()
@@ -44,7 +53,13 @@ class EmployeeService:
             person_id=person.id
         )
         self.db.add(employment)
-        await self.db.flush() # Get employment.id
+        try:
+            await self.db.flush() # Get employment.id
+        except IntegrityError as e:
+            await self.db.rollback()
+            if "uq_employment_code" in str(e):
+                raise HTTPException(status_code=400, detail=f"Employee Code '{employment.employee_code}' already exists for this entity.")
+            raise e
 
         # 3. Create Bank Account (Optional)
         if data.bank_account:
@@ -70,9 +85,11 @@ class EmployeeService:
 
     async def get_employees(self, entity_id: uuid.UUID, group_id: uuid.UUID = None) -> List[EmployeeSummary]:
         query = (
-            select(Employment, Person, Department)
+            select(Employment, Person, Department, Group, Grade)
             .join(Person, Employment.person_id == Person.id)
             .outerjoin(Department, Employment.department_id == Department.id)
+            .outerjoin(Group, Employment.group_id == Group.id)
+            .outerjoin(Grade, Employment.grade_id == Grade.id)
             .where(Employment.entity_id == entity_id)
         )
         if group_id:
@@ -81,13 +98,15 @@ class EmployeeService:
         rows = result.all()
         
         summaries = []
-        for emp, person, dept in rows:
+        for emp, person, dept, grp, grd in rows:
             summaries.append(EmployeeSummary(
                 id=emp.id,
                 full_name=person.full_name,
                 employee_code=emp.employee_code,
                 job_title=emp.job_title,
                 department_name=dept.name if dept else None,
+                group_name=grp.name if grp else None,
+                grade_name=grd.name if grd else None,
                 is_active=emp.is_active,
                 join_date=emp.join_date,
                 person_id=person.id
@@ -147,9 +166,16 @@ class EmployeeService:
             work_pass_type=emp.work_pass_type,
             work_pass_no=emp.work_pass_no,
             work_pass_expiry=emp.work_pass_expiry,
+            foreign_worker_levy=float(emp.foreign_worker_levy or 0),
             join_date=emp.join_date,
             resign_date=emp.resign_date,
+            cessation_date=emp.cessation_date,
             probation_end_date=emp.probation_end_date,
+            designation=emp.designation,
+            working_days_per_week=float(emp.working_days_per_week) if emp.working_days_per_week else None,
+            rest_day=emp.rest_day,
+            work_hours_per_day=float(emp.work_hours_per_day) if emp.work_hours_per_day else None,
+            normal_work_hours_per_week=float(emp.normal_work_hours_per_week) if emp.normal_work_hours_per_week else None,
             basic_salary=float(emp.basic_salary),
             payment_mode=emp.payment_mode,
             is_ot_eligible=emp.is_ot_eligible,
@@ -192,9 +218,11 @@ class EmployeeService:
         # Update Person fields
         if data.person:
             person_updates = data.person.model_dump(exclude_unset=True)
-            # Handle NRIC re-encryption if provided
+            # Handle NRIC re-encryption and hashing if provided
             if "nric_fin" in person_updates and person_updates["nric_fin"]:
-                person_updates["nric_fin"] = encryptor.encrypt(person_updates["nric_fin"])
+                raw = person_updates["nric_fin"]
+                person_updates["nric_fin"] = encryptor.encrypt(raw)
+                person_updates["nric_fin_hash"] = encryptor.get_hash(raw)
             if person_updates:
                 await self.db.execute(
                     update(Person).where(Person.id == employment.person_id).values(**person_updates)
@@ -208,7 +236,17 @@ class EmployeeService:
                     update(Employment).where(Employment.id == employment_id).values(**emp_updates)
                 )
 
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as e:
+            await self.db.rollback()
+            msg = str(e)
+            if "uq_persons_nric" in msg:
+                raise HTTPException(status_code=400, detail="NRIC/FIN already exists for this tenant.")
+            if "uq_employment_code" in msg:
+                raise HTTPException(status_code=400, detail="Employee Code already exists for this entity.")
+            raise e
+
         # Return updated detail
         return await self.get_employee_detail(employment_id)
 

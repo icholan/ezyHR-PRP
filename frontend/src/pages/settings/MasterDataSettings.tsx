@@ -51,6 +51,7 @@ const MasterDataSettings: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [modalError, setModalError] = useState('');
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<any | null>(null);
@@ -124,6 +125,7 @@ const MasterDataSettings: React.FC = () => {
             setUen(''); setBillingAddress(''); setContactName(''); setContactEmail(''); setContactNumber('');
             setIsPaid(true); setIsStatutory(false);
         }
+        setModalError('');
         setIsModalOpen(true);
     };
 
@@ -164,8 +166,7 @@ const MasterDataSettings: React.FC = () => {
             setIsModalOpen(false);
             fetchItems();
         } catch (err: any) {
-            toast.error(err.response?.data?.detail || 'Failed to save item');
-            setError(err.response?.data?.detail || 'Failed to save item');
+            setModalError(err.response?.data?.detail || 'Failed to save item');
         }
     };
 
@@ -497,6 +498,16 @@ const MasterDataSettings: React.FC = () => {
                             </div>
 
                             <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-8 space-y-6">
+                                {modalError && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 p-4 rounded-2xl flex items-start gap-3 border border-rose-100 dark:border-rose-800"
+                                    >
+                                        <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                                        <p className="text-sm font-medium">{modalError}</p>
+                                    </motion.div>
+                                )}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="col-span-2">
                                         <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block">Display Name <span className="text-rose-500">*</span></label>

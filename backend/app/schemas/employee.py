@@ -19,6 +19,9 @@ class PersonBase(BaseModel):
     pr_start_date: Optional[date] = None
     work_pass_start: Optional[date] = None
     address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    emergency_contact_number: Optional[str] = None
 
 class PersonCreate(PersonBase):
     nric_fin: str  # Mandatory for creation, will be encrypted
@@ -46,6 +49,7 @@ class EmploymentBase(BaseModel):
     work_pass_type: Optional[str] = None
     work_pass_no: Optional[str] = None
     work_pass_expiry: Optional[date] = None
+    foreign_worker_levy: float = 0.0
     join_date: date
     resign_date: Optional[date] = None
     cessation_date: Optional[date] = None
@@ -89,6 +93,8 @@ class EmployeeSummary(BaseModel):
     employee_code: Optional[str]
     job_title: Optional[str]
     department_name: Optional[str]
+    group_name: Optional[str] = None
+    grade_name: Optional[str] = None
     is_active: bool
     join_date: date
     person_id: uuid.UUID
@@ -111,6 +117,9 @@ class EmployeeDetailPerson(BaseModel):
     pr_start_date: Optional[date] = None
     work_pass_start: Optional[date] = None
     address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    emergency_contact_number: Optional[str] = None
 
 class EmployeeDetailEmployment(BaseModel):
     id: uuid.UUID
@@ -126,6 +135,7 @@ class EmployeeDetailEmployment(BaseModel):
     work_pass_type: Optional[str] = None
     work_pass_no: Optional[str] = None
     work_pass_expiry: Optional[date] = None
+    foreign_worker_levy: float
     join_date: date
     resign_date: Optional[date] = None
     cessation_date: Optional[date] = None

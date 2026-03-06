@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { clsx } from 'clsx';
+import toast from 'react-hot-toast';
 
 interface PersonDetail {
     id: string;
@@ -42,6 +43,7 @@ interface EmploymentDetail {
     work_pass_type: string | null;
     work_pass_no: string | null;
     work_pass_expiry: string | null;
+    foreign_worker_levy: number;
     join_date: string;
     resign_date: string | null;
     cessation_date: string | null;
@@ -70,12 +72,13 @@ interface EmployeeData {
     bank_account: BankDetail | null;
 }
 
-type TabId = 'overview' | 'employment' | 'financial';
+type TabId = 'overview' | 'employment' | 'financial' | 'leave';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: 'overview', label: 'Overview', icon: User },
     { id: 'employment', label: 'Employment', icon: Briefcase },
     { id: 'financial', label: 'Financial', icon: CreditCard },
+    { id: 'leave', label: 'Leave Balances', icon: Calendar },
 ];
 
 const CITIZENSHIP_LABELS: Record<string, string> = {
@@ -141,6 +144,26 @@ const EmployeeProfile = () => {
         fetchDetail();
     }, [id]);
 
+    const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
+    const [loadingLeave, setLoadingLeave] = useState(false);
+
+    useEffect(() => {
+        if (activeTab === 'leave' && data?.employment?.id) {
+            const fetchBalances = async () => {
+                setLoadingLeave(true);
+                try {
+                    const resp = await api.get(`/api/v1/leave/balances?employment_id=${data.employment.id}`);
+                    setLeaveBalances(resp.data);
+                } catch (err) {
+                    console.error('Failed to fetch leave balances', err);
+                } finally {
+                    setLoadingLeave(false);
+                }
+            };
+            fetchBalances();
+        }
+    }, [activeTab, data?.employment?.id]);
+
     const enterEditMode = () => {
         if (!data) return;
         setEditPerson({ ...data.person });
@@ -193,9 +216,11 @@ const EmployeeProfile = () => {
             const resp = await api.put(`/api/v1/employees/${id}`, payload);
             setData(resp.data);
             setEditing(false);
-        } catch (err) {
+            toast.success('Changes saved successfully');
+        } catch (err: any) {
             console.error('Failed to update employee', err);
-            alert('Error saving changes. Please try again.');
+            const msg = err.response?.data?.detail || 'Error saving changes. Please try again.';
+            toast.error(msg);
         } finally {
             setSaving(false);
         }
@@ -409,6 +434,13 @@ const EmployeeProfile = () => {
                         <div>
                             <Field label="Address" icon={MapPin} value={fieldValue('person', 'address')} editing={editing} multiline onChange={v => updateField('person', 'address', v)} />
                         </div>
+
+                        <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 pt-4">Emergency Contact</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Field label="Emergency Contact Name" icon={User} value={fieldValue('person', 'emergency_contact_name')} editing={editing} onChange={v => updateField('person', 'emergency_contact_name', v)} />
+                            <Field label="Relationship" value={fieldValue('person', 'emergency_contact_relationship')} editing={editing} onChange={v => updateField('person', 'emergency_contact_relationship', v)} />
+                            <Field label="Emergency Contact Number" icon={Phone} value={fieldValue('person', 'emergency_contact_number')} editing={editing} onChange={v => updateField('person', 'emergency_contact_number', v)} />
+                        </div>
                     </div>
                 )}
 
@@ -447,6 +479,25 @@ const EmployeeProfile = () => {
                             <Field label="Work Hours Per Day" value={fieldValue('employment', 'work_hours_per_day')} editing={editing} type="number" onChange={v => updateField('employment', 'work_hours_per_day', parseFloat(v))} />
                             <Field label="Normal Work Hours Per Week" value={fieldValue('employment', 'normal_work_hours_per_week')} editing={editing} type="number" onChange={v => updateField('employment', 'normal_work_hours_per_week', parseFloat(v))} />
                         </div>
+
+                        {data.employment.citizenship_type !== 'citizen' && (
+                            <>
+                                <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 pt-4">Work Pass & Levy</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <Field label="Work Pass Type" value={fieldValue('employment', 'work_pass_type')} editing={editing} onChange={v => updateField('employment', 'work_pass_type', v)} />
+                                    <Field label="Work Pass Number" value={fieldValue('employment', 'work_pass_no')} editing={editing} onChange={v => updateField('employment', 'work_pass_no', v)} />
+                                    <Field label="Work Pass Expiry" icon={Calendar} value={editing ? fieldValue('employment', 'work_pass_expiry') : formatDate(employment.work_pass_expiry)} editing={editing} type="date" onChange={v => updateField('employment', 'work_pass_expiry', v)} />
+                                    <Field
+                                        label="Foreign Worker Levy ($)"
+                                        icon={DollarSign}
+                                        value={editing ? fieldValue('employment', 'foreign_worker_levy') : `$${Number(employment.foreign_worker_levy || 0).toLocaleString('en-SG', { minimumFractionDigits: 2 })}`}
+                                        editing={editing}
+                                        type={editing ? 'number' : 'text'}
+                                        onChange={v => updateField('employment', 'foreign_worker_levy', parseFloat(v) || 0)}
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -491,6 +542,54 @@ const EmployeeProfile = () => {
                         ) : (
                             <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-8 text-center text-gray-400 dark:text-gray-500">
                                 No bank account linked
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'leave' && (
+                    <div className="space-y-8 animate-in fade-in duration-300">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <h2 className="text-xl font-bold text-dark-950 dark:text-gray-50">Leave Balances</h2>
+                        </div>
+
+                        {loadingLeave ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {Array(3).fill(0).map((_, i) => (
+                                    <div key={i} className="h-32 bg-gray-50/50 dark:bg-gray-800/50 rounded-2xl animate-pulse"></div>
+                                ))}
+                            </div>
+                        ) : leaveBalances.length === 0 ? (
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-8 text-center text-gray-500 dark:text-gray-400">
+                                No leave balances configured for this employee.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {leaveBalances.map((bal, i) => (
+                                    <div key={i} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] p-6 shadow-xl shadow-gray-200/20 dark:shadow-gray-900/50 flex flex-col hover:-translate-y-1 transition-all duration-300">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 flex items-center justify-center shrink-0">
+                                                    <Calendar className="w-5 h-5" />
+                                                </div>
+                                                <h3 className="font-bold text-dark-950 dark:text-gray-50">{bal.leave_type_name}</h3>
+                                            </div>
+                                            <span className="text-2xl font-black text-primary-600 dark:text-primary-400">{bal.balance}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-y-2 text-sm mt-auto">
+                                            <div className="text-gray-500 dark:text-gray-400">Allocated</div>
+                                            <div className="text-right font-medium text-dark-950 dark:text-gray-100">{bal.allocated}</div>
+                                            {bal.carry_forward > 0 && (
+                                                <>
+                                                    <div className="text-gray-500 dark:text-gray-400">Carry Forward</div>
+                                                    <div className="text-right font-medium text-dark-950 dark:text-gray-100">{bal.carry_forward}</div>
+                                                </>
+                                            )}
+                                            <div className="text-gray-500 dark:text-gray-400">Consumed</div>
+                                            <div className="text-right font-medium text-rose-600 dark:text-rose-400">{bal.consumed}</div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>

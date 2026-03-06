@@ -86,3 +86,19 @@ Phase 3 (Advanced)
   ├── family_links + SPL cross-person pool
   ├── GPPL/Paternity birth-date logic
   └── Admin UI for managing rules tables
+
+
+
+
+1. The "Apply for Leave" Experience (Employee Facing) 🏖️ You have a incredibly powerful compliance engine in the backend now. We can build a beautiful frontend "Apply for Leave" wizard for employees. This would include:
+
+Selecting the leave type and date range.
+Smart Calculation: Real-time calculation of "working days" consumed (automatically detecting and skipping weekends or public holidays).
+File Upload: A drag-and-drop zone to attach Medical Certificates when applying for Sick/Hospitalisation leave.
+2. Employee Directory & Detailed Profiles 🧑‍💼 We can build a modern "Employee Directory" grid/list view (sharing the sleek design language we just built for Master Data) and a detailed individual "Employee Profile" screen. This profile would cleanly display their Personal Data, Job History, Salary Details, Emergency Contacts, and real-time Leave Balances.
+
+3. Settings: Company Profile & Defaults 🏢 Under Settings, we can build the "Company Profile" UI to let you upload a company logo, set the UEN/Address, and configure global defaults like standard Working Hours and Rest Days (which are critical for attendance and payroll).
+
+4. Role & Permission Management 🔐 We have a robust custom roles and permissions architecture in the database. We could build an admin UI to visually toggle permissions (like VIEW_PAYROLL or APPROVE_LEAVE) for different custom roles, allowing you to easily set up Managers vs. HR Admins.
+
+5. Payroll Run Dashboard 💰 If you want to shift focus to finances, we can build the UI that actually triggers a new monthly Payroll Run, dynamically calculating the CPF, SDL, and SHG deductions based on the employee data we've seeded, and displays the gross-to-net salary breakdown in a payslip

@@ -11,6 +11,7 @@ class Person(Base, IDMixin, TimestampMixin):
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     nric_fin: Mapped[str] = mapped_column(String(255), nullable=True)  # AES-256 Encrypted (stored as ciphertext)
+    nric_fin_hash: Mapped[str] = mapped_column(String(64), nullable=True, index=True)  # SHA-256 Blind Index
     nationality: Mapped[str] = mapped_column(String(50), nullable=True)
     race: Mapped[str] = mapped_column(String(50), nullable=True)
     religion: Mapped[str] = mapped_column(String(50), nullable=True)
@@ -26,8 +27,13 @@ class Person(Base, IDMixin, TimestampMixin):
     work_pass_start: Mapped[datetime.date] = mapped_column(Date, nullable=True)  # For Foreigners
     family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=True)  # Links spouses for family pools
     address: Mapped[str] = mapped_column(Text, nullable=True)
+    
+    # Emergency Contact
+    emergency_contact_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    emergency_contact_relationship: Mapped[str] = mapped_column(String(100), nullable=True)
+    emergency_contact_number: Mapped[str] = mapped_column(String(20), nullable=True)
 
-    __table_args__ = (UniqueConstraint("tenant_id", "nric_fin", name="uq_persons_nric"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "nric_fin_hash", name="uq_persons_nric"),)
 
 class Department(Base, IDMixin, TimestampMixin):
     __tablename__ = "departments"
@@ -105,6 +111,7 @@ class Employment(Base, IDMixin, TimestampMixin):
     work_pass_type: Mapped[str] = mapped_column(String(50), nullable=True)
     work_pass_no: Mapped[str] = mapped_column(String(50), nullable=True)
     work_pass_expiry: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+    foreign_worker_levy: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     join_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     resign_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
     cessation_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
@@ -120,4 +127,7 @@ class Employment(Base, IDMixin, TimestampMixin):
     is_ot_eligible: Mapped[bool] = mapped_column(Boolean, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    __table_args__ = (UniqueConstraint("person_id", "entity_id", "join_date", name="uq_employments_period"),)
+    __table_args__ = (
+        UniqueConstraint("person_id", "entity_id", "join_date", name="uq_employments_period"),
+        UniqueConstraint("entity_id", "employee_code", name="uq_employment_code"),
+    )

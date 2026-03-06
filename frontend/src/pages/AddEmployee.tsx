@@ -25,11 +25,13 @@ import {
     Tag,
     Layers
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { clsx } from 'clsx';
 import DatePicker from '../components/DatePicker';
 import { useAuthStore } from '../store/useAuthStore';
+import SearchableSelect from '../components/Common/SearchableSelect';
 
 const REQUIRED_PERSON_FIELDS: { key: string; label: string }[] = [
     { key: 'full_name', label: 'Full Name' },
@@ -93,6 +95,7 @@ const AddEmployee = () => {
             work_hours_per_day: '',
             normal_work_hours_per_week: '',
             basic_salary: 0,
+            foreign_worker_levy: 0,
             is_ot_eligible: true
         },
         bank_account: {
@@ -262,6 +265,12 @@ const AddEmployee = () => {
         } catch (error: any) {
             console.error("Failed to create employee", error);
 
+            if (error.response?.status === 400) {
+                toast.error(error.response.data?.detail || "Failed to create employee");
+                setLoading(false);
+                return;
+            }
+
             if (error.response?.status === 422 && error.response.data?.detail) {
                 const backendErrors: Record<string, string> = {};
                 let firstErrorStep = step;
@@ -402,27 +411,32 @@ const AddEmployee = () => {
                                 {/* Gender */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Gender{req}</label>
-                                    <select
-                                        className={clsx('input-field', formErrors.gender && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
-                                        value={formData.person.gender}
-                                        onChange={(e) => handleInputChange('person', 'gender', e.target.value)}
-                                    >
-                                        <option value="male">Male</option>
-                                        <option value="female">Female</option>
-                                        <option value="other">Other</option>
-                                    </select>
+                                    <div className={clsx(formErrors.gender && 'ring-2 ring-red-400 rounded-[16px]')}>
+                                        <SearchableSelect
+                                            options={[
+                                                { id: 'male', label: 'Male' },
+                                                { id: 'female', label: 'Female' },
+                                                { id: 'other', label: 'Other' }
+                                            ]}
+                                            value={formData.person.gender}
+                                            onChange={(val) => handleInputChange('person', 'gender', val)}
+                                            placeholder="Select Gender"
+                                        />
+                                    </div>
                                     {fieldError('gender')}
                                 </div>
                                 {/* Nationality */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Nationality{req}</label>
-                                    <div className="relative">
-                                        <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                        <select
-                                            className={clsx('input-field pl-12', formErrors.nationality && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
+                                    <div className={clsx("relative", formErrors.nationality && 'ring-2 ring-red-400 rounded-[16px]')}>
+                                        <SearchableSelect
+                                            options={[
+                                                { id: 'Singapore Citizen', label: 'Singapore Citizen' },
+                                                { id: 'SPR', label: 'SPR (Permanent Resident)' },
+                                                { id: 'Foreigner', label: 'Foreigner' }
+                                            ]}
                                             value={formData.person.nationality}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
+                                            onChange={(val) => {
                                                 handleInputChange('person', 'nationality', val);
                                                 // Auto-set citizenship_type based on nationality
                                                 if (val === 'Singapore Citizen') {
@@ -433,67 +447,66 @@ const AddEmployee = () => {
                                                     handleInputChange('employment', 'citizenship_type', 'foreigner');
                                                 }
                                             }}
-                                        >
-                                            <option value="Singapore Citizen">Singapore Citizen</option>
-                                            <option value="SPR">SPR (Permanent Resident)</option>
-                                            <option value="Foreigner">Foreigner</option>
-                                        </select>
+                                            placeholder="Select Nationality"
+                                        />
                                     </div>
                                     {fieldError('nationality')}
                                 </div>
                                 {/* Race */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Race{req}</label>
-                                    <select
-                                        className={clsx('input-field', formErrors.race && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
-                                        value={formData.person.race}
-                                        onChange={(e) => handleInputChange('person', 'race', e.target.value)}
-                                    >
-                                        <option value="Chinese">Chinese</option>
-                                        <option value="Malay">Malay</option>
-                                        <option value="Indian">Indian</option>
-                                        <option value="Eurasian">Eurasian</option>
-                                        <option value="Others">Others</option>
-                                    </select>
+                                    <div className={clsx(formErrors.race && 'ring-2 ring-red-400 rounded-[16px]')}>
+                                        <SearchableSelect
+                                            options={[
+                                                { id: 'Chinese', label: 'Chinese' },
+                                                { id: 'Malay', label: 'Malay' },
+                                                { id: 'Indian', label: 'Indian' },
+                                                { id: 'Eurasian', label: 'Eurasian' },
+                                                { id: 'Others', label: 'Others' }
+                                            ]}
+                                            value={formData.person.race}
+                                            onChange={(val) => handleInputChange('person', 'race', val)}
+                                            placeholder="Select Race"
+                                        />
+                                    </div>
                                     {fieldError('race')}
                                 </div>
                                 {/* Language */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Language</label>
-                                    <select
-                                        className="input-field"
+                                    <SearchableSelect
+                                        options={[
+                                            { id: 'English', label: 'English' },
+                                            { id: 'Mandarin', label: 'Mandarin' },
+                                            { id: 'Malay', label: 'Malay' },
+                                            { id: 'Tamil', label: 'Tamil' },
+                                            { id: 'Others', label: 'Others' }
+                                        ]}
                                         value={formData.person.language}
-                                        onChange={(e) => handleInputChange('person', 'language', e.target.value)}
-                                    >
-                                        <option value="English">English</option>
-                                        <option value="Mandarin">Mandarin</option>
-                                        <option value="Malay">Malay</option>
-                                        <option value="Tamil">Tamil</option>
-                                        <option value="Others">Others</option>
-                                    </select>
+                                        onChange={(val) => handleInputChange('person', 'language', val)}
+                                        placeholder="Select Language"
+                                    />
                                 </div>
                                 {/* Highest Education */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Highest Education Attained</label>
-                                    <div className="relative">
-                                        <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                        <select
-                                            className="input-field pl-12"
-                                            value={formData.person.highest_education}
-                                            onChange={(e) => handleInputChange('person', 'highest_education', e.target.value)}
-                                        >
-                                            <option value="">Select Education Level</option>
-                                            <option value="Below Secondary">Below Secondary</option>
-                                            <option value="Secondary">Secondary</option>
-                                            <option value="Post Secondary (Non-Tertiary)">Post Secondary (Non-Tertiary)</option>
-                                            <option value="Diploma">Diploma</option>
-                                            <option value="Professional Qualification">Professional Qualification</option>
-                                            <option value="Bachelor's Degree">Bachelor's Degree</option>
-                                            <option value="Postgraduate Diploma">Postgraduate Diploma</option>
-                                            <option value="Master's Degree">Master's Degree</option>
-                                            <option value="Doctorate">Doctorate</option>
-                                        </select>
-                                    </div>
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Education Level' },
+                                            { id: 'Below Secondary', label: 'Below Secondary' },
+                                            { id: 'Secondary', label: 'Secondary' },
+                                            { id: 'Post Secondary (Non-Tertiary)', label: 'Post Secondary (Non-Tertiary)' },
+                                            { id: 'Diploma', label: 'Diploma' },
+                                            { id: 'Professional Qualification', label: 'Professional Qualification' },
+                                            { id: "Bachelor's Degree", label: "Bachelor's Degree" },
+                                            { id: 'Postgraduate Diploma', label: 'Postgraduate Diploma' },
+                                            { id: "Master's Degree", label: "Master's Degree" },
+                                            { id: 'Doctorate', label: 'Doctorate' }
+                                        ]}
+                                        value={formData.person.highest_education}
+                                        onChange={(val) => handleInputChange('person', 'highest_education', val)}
+                                        placeholder="Select Education Level"
+                                    />
                                 </div>
                             </div>
 
@@ -523,20 +536,20 @@ const AddEmployee = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-2">
                                             <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Work Pass Type{req}</label>
-                                            <div className="relative">
-                                                <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500" />
-                                                <select
-                                                    className={clsx('input-field pl-12 border-blue-200 focus:border-blue-400', formErrors.work_pass_type && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
+                                            <div className={clsx(formErrors.work_pass_type && 'ring-2 ring-red-400 rounded-[16px]')}>
+                                                <SearchableSelect
+                                                    options={[
+                                                        { id: '', label: 'Select Work Pass Type' },
+                                                        { id: 'Employment Pass', label: 'Employment Pass' },
+                                                        { id: 'S Pass', label: 'S Pass' },
+                                                        { id: 'Work Permit', label: 'Work Permit' },
+                                                        { id: 'Dependent Pass (with LOC)', label: 'Dependent Pass (with LOC)' },
+                                                        { id: 'Others', label: 'Others' }
+                                                    ]}
                                                     value={formData.employment.work_pass_type}
-                                                    onChange={(e) => handleInputChange('employment', 'work_pass_type', e.target.value)}
-                                                >
-                                                    <option value="">Select Work Pass Type</option>
-                                                    <option value="Employment Pass">Employment Pass</option>
-                                                    <option value="S Pass">S Pass</option>
-                                                    <option value="Work Permit">Work Permit</option>
-                                                    <option value="Dependent Pass (with LOC)">Dependent Pass (with LOC)</option>
-                                                    <option value="Others">Others</option>
-                                                </select>
+                                                    onChange={(val) => handleInputChange('employment', 'work_pass_type', val)}
+                                                    placeholder="Select Work Pass"
+                                                />
                                             </div>
                                             {fieldError('work_pass_type')}
                                         </div>
@@ -576,7 +589,21 @@ const AddEmployee = () => {
                                                 error={formErrors.work_pass_expiry}
                                                 inputClassName="border-blue-200 focus:border-blue-400"
                                             />
-                                            {fieldError('work_pass_expiry')}
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Foreign Worker Levy ($)</label>
+                                                <div className="relative">
+                                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</div>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        className="input-field pl-8 border-blue-200 focus:border-blue-400"
+                                                        placeholder="0.00"
+                                                        value={formData.employment.foreign_worker_levy}
+                                                        onChange={(e) => handleInputChange('employment', 'foreign_worker_levy', parseFloat(e.target.value) || 0)}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </>
@@ -707,16 +734,17 @@ const AddEmployee = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Employment Type</label>
-                                    <select
-                                        className="input-field"
+                                    <SearchableSelect
+                                        options={[
+                                            { id: 'full_time', label: 'Full Time' },
+                                            { id: 'part_time', label: 'Part Time' },
+                                            { id: 'contract', label: 'Contract' },
+                                            { id: 'director', label: 'Director' }
+                                        ]}
                                         value={formData.employment.employment_type}
-                                        onChange={(e) => handleInputChange('employment', 'employment_type', e.target.value)}
-                                    >
-                                        <option value="full_time">Full Time</option>
-                                        <option value="part_time">Part Time</option>
-                                        <option value="contract">Contract</option>
-                                        <option value="director">Director</option>
-                                    </select>
+                                        onChange={(val) => handleInputChange('employment', 'employment_type', val)}
+                                        placeholder="Select Type"
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Join Date</label>
@@ -743,18 +771,16 @@ const AddEmployee = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Department{req}</label>
-                                    <div className="relative">
-                                        <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                        <select
-                                            className={clsx('input-field pl-12', formErrors.department_id && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
+                                    <div className={clsx(formErrors.department_id && 'ring-2 ring-red-400 rounded-[16px]')}>
+                                        <SearchableSelect
+                                            options={[
+                                                { id: '', label: 'Select Department' },
+                                                ...departments.map(d => ({ id: d.id, label: d.name }))
+                                            ]}
                                             value={formData.employment.department_id}
-                                            onChange={(e) => handleInputChange('employment', 'department_id', e.target.value)}
-                                        >
-                                            <option value="">Select Department</option>
-                                            {departments.map(d => (
-                                                <option key={d.id} value={d.id}>{d.name}</option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => handleInputChange('employment', 'department_id', val)}
+                                            placeholder="Select Department"
+                                        />
                                     </div>
                                     {fieldError('department_id')}
                                 </div>
@@ -774,36 +800,30 @@ const AddEmployee = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Employment Group{req}</label>
-                                    <div className="relative">
-                                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                        <select
-                                            className={clsx('input-field pl-12', formErrors.group_id && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
+                                    <div className={clsx(formErrors.group_id && 'ring-2 ring-red-400 rounded-[16px]')}>
+                                        <SearchableSelect
+                                            options={[
+                                                { id: '', label: 'Select Group' },
+                                                ...groups.map(g => ({ id: g.id, label: g.name }))
+                                            ]}
                                             value={formData.employment.group_id}
-                                            onChange={(e) => handleInputChange('employment', 'group_id', e.target.value)}
-                                        >
-                                            <option value="">Select Group</option>
-                                            {groups.map(g => (
-                                                <option key={g.id} value={g.id}>{g.name}</option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => handleInputChange('employment', 'group_id', val)}
+                                            placeholder="Select Group"
+                                        />
                                     </div>
                                     {fieldError('group_id')}
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Employment Grade</label>
-                                    <div className="relative">
-                                        <Hash className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
-                                        <select
-                                            className="input-field pl-12"
-                                            value={formData.employment.grade_id}
-                                            onChange={(e) => handleInputChange('employment', 'grade_id', e.target.value)}
-                                        >
-                                            <option value="">Select Grade</option>
-                                            {grades.map(g => (
-                                                <option key={g.id} value={g.id}>{g.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Grade' },
+                                            ...grades.map(g => ({ id: g.id, label: g.name }))
+                                        ]}
+                                        value={formData.employment.grade_id}
+                                        onChange={(val) => handleInputChange('employment', 'grade_id', val)}
+                                        placeholder="Select Grade"
+                                    />
                                 </div>
                             </div>
 
@@ -829,20 +849,21 @@ const AddEmployee = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Rest Day</label>
-                                    <select
-                                        className="input-field"
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Rest Day' },
+                                            { id: 'Monday', label: 'Monday' },
+                                            { id: 'Tuesday', label: 'Tuesday' },
+                                            { id: 'Wednesday', label: 'Wednesday' },
+                                            { id: 'Thursday', label: 'Thursday' },
+                                            { id: 'Friday', label: 'Friday' },
+                                            { id: 'Saturday', label: 'Saturday' },
+                                            { id: 'Sunday', label: 'Sunday' }
+                                        ]}
                                         value={formData.employment.rest_day}
-                                        onChange={(e) => handleInputChange('employment', 'rest_day', e.target.value)}
-                                    >
-                                        <option value="">Select Rest Day</option>
-                                        <option value="Monday">Monday</option>
-                                        <option value="Tuesday">Tuesday</option>
-                                        <option value="Wednesday">Wednesday</option>
-                                        <option value="Thursday">Thursday</option>
-                                        <option value="Friday">Friday</option>
-                                        <option value="Saturday">Saturday</option>
-                                        <option value="Sunday">Sunday</option>
-                                    </select>
+                                        onChange={(val) => handleInputChange('employment', 'rest_day', val)}
+                                        placeholder="Select Rest Day"
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Work Hours Per Day</label>
