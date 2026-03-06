@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/useAuthStore';
+import toast from 'react-hot-toast';
 
 // Common types
 interface MasterItem {
@@ -135,8 +136,10 @@ const MasterDataSettings: React.FC = () => {
                 const payload = { name, code, is_paid: isPaid, is_statutory: isStatutory, description: description || null };
                 if (editingItem) {
                     await api.patch(`/api/v1/leave/types/${editingItem.id}?entity_id=${activeEntityId}`, payload);
+                    toast.success('Leave type updated successfully');
                 } else {
                     await api.post(`/api/v1/leave/types?entity_id=${activeEntityId}`, payload);
+                    toast.success('Leave type created successfully');
                 }
             } else {
                 const payload: any = { name, code: code || null };
@@ -152,13 +155,16 @@ const MasterDataSettings: React.FC = () => {
                 }
                 if (editingItem) {
                     await api.patch(`/api/v1/masters/${activeTab}/${editingItem.id}?entity_id=${activeEntityId}`, payload);
+                    toast.success('Record updated successfully');
                 } else {
                     await api.post(`/api/v1/masters/${activeTab}?entity_id=${activeEntityId}`, payload);
+                    toast.success('Record created successfully');
                 }
             }
             setIsModalOpen(false);
             fetchItems();
         } catch (err: any) {
+            toast.error(err.response?.data?.detail || 'Failed to save item');
             setError(err.response?.data?.detail || 'Failed to save item');
         }
     };
@@ -176,8 +182,10 @@ const MasterDataSettings: React.FC = () => {
                 await api.delete(`/api/v1/masters/${activeTab}/${deleteConfirmItem.id}?entity_id=${activeEntityId}`);
             }
             setDeleteConfirmItem(null);
+            toast.success('Record deleted successfully');
             fetchItems();
         } catch (err: any) {
+            toast.error(err.response?.data?.detail || 'Failed to delete item');
             setError(err.response?.data?.detail || 'Failed to delete item');
         }
     };

@@ -39,6 +39,8 @@ class Department(Base, IDMixin, TimestampMixin):
     parent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    __table_args__ = (UniqueConstraint("entity_id", "code", name="uq_department_code"),)
+
 class Grade(Base, IDMixin, TimestampMixin):
     __tablename__ = "grades"
 
@@ -48,6 +50,8 @@ class Grade(Base, IDMixin, TimestampMixin):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    __table_args__ = (UniqueConstraint("entity_id", "code", name="uq_grade_code"),)
+
 class Group(Base, IDMixin, TimestampMixin):
     __tablename__ = "groups"
 
@@ -56,6 +60,8 @@ class Group(Base, IDMixin, TimestampMixin):
     code: Mapped[str] = mapped_column(String(50), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint("entity_id", "code", name="uq_group_code"),)
 
 class Customer(Base, IDMixin, TimestampMixin):
     __tablename__ = "customers"
@@ -69,6 +75,8 @@ class Customer(Base, IDMixin, TimestampMixin):
     contact_email: Mapped[str] = mapped_column(String(255), nullable=True)
     contact_number: Mapped[str] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint("entity_id", "code", name="uq_customer_code"),)
 
 class BankAccount(Base, IDMixin, TimestampMixin):
     __tablename__ = "bank_accounts"

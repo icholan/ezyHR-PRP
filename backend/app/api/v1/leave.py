@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
 from datetime import date
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 import uuid
 
 from app.api.v1.dependencies import get_db, get_current_user
@@ -174,8 +176,12 @@ async def create_leave_type(
 ):
     lt = LeaveType(entity_id=entity_id, **payload.model_dump())
     db.add(lt)
-    await db.commit()
-    await db.refresh(lt)
+    try:
+        await db.commit()
+        await db.refresh(lt)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Leave type code already exists. Please choose a unique code.")
     return lt
 
 
@@ -195,8 +201,12 @@ async def update_leave_type(
         raise HTTPException(status_code=404, detail="Leave type not found")
     for field, val in payload.model_dump(exclude_none=True).items():
         setattr(lt, field, val)
-    await db.commit()
-    await db.refresh(lt)
+    try:
+        await db.commit()
+        await db.refresh(lt)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Leave type code already exists. Please choose a unique code.")
     return lt
 
 

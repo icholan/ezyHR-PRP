@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.exc import IntegrityError
 from typing import List
 import uuid
 
@@ -45,8 +46,12 @@ async def create_department(
 ):
     db_dept = Department(**dept_in.model_dump())
     db.add(db_dept)
-    await db.commit()
-    await db.refresh(db_dept)
+    try:
+        await db.commit()
+        await db.refresh(db_dept)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_dept
 
 @router.patch("/departments/{dept_id}", response_model=DepartmentRead)
@@ -63,8 +68,12 @@ async def update_department(
     for field, value in update_data.items():
         setattr(db_dept, field, value)
         
-    await db.commit()
-    await db.refresh(db_dept)
+    try:
+        await db.commit()
+        await db.refresh(db_dept)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_dept
 
 @router.delete("/departments/{dept_id}", response_model=dict)
@@ -99,8 +108,12 @@ async def create_grade(
 ):
     db_grade = Grade(**grade_in.model_dump())
     db.add(db_grade)
-    await db.commit()
-    await db.refresh(db_grade)
+    try:
+        await db.commit()
+        await db.refresh(db_grade)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_grade
 
 @router.patch("/grades/{grade_id}", response_model=GradeRead)
@@ -117,8 +130,12 @@ async def update_grade(
     for field, value in update_data.items():
         setattr(db_grade, field, value)
         
-    await db.commit()
-    await db.refresh(db_grade)
+    try:
+        await db.commit()
+        await db.refresh(db_grade)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_grade
 
 @router.delete("/grades/{grade_id}", response_model=dict)
@@ -153,8 +170,12 @@ async def create_group(
 ):
     db_group = Group(**group_in.model_dump())
     db.add(db_group)
-    await db.commit()
-    await db.refresh(db_group)
+    try:
+        await db.commit()
+        await db.refresh(db_group)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_group
 
 @router.patch("/groups/{group_id}", response_model=GroupRead)
@@ -171,8 +192,12 @@ async def update_group(
     for field, value in update_data.items():
         setattr(db_group, field, value)
         
-    await db.commit()
-    await db.refresh(db_group)
+    try:
+        await db.commit()
+        await db.refresh(db_group)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_group
 
 @router.delete("/groups/{group_id}", response_model=dict)
@@ -207,8 +232,12 @@ async def create_customer(
 ):
     db_customer = Customer(**customer_in.model_dump())
     db.add(db_customer)
-    await db.commit()
-    await db.refresh(db_customer)
+    try:
+        await db.commit()
+        await db.refresh(db_customer)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_customer
 
 @router.patch("/customers/{customer_id}", response_model=CustomerRead)
@@ -225,8 +254,12 @@ async def update_customer(
     for field, value in update_data.items():
         setattr(db_customer, field, value)
         
-    await db.commit()
-    await db.refresh(db_customer)
+    try:
+        await db.commit()
+        await db.refresh(db_customer)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Code already exists. Please choose a unique code.")
     return db_customer
 
 @router.delete("/customers/{customer_id}", response_model=dict)

@@ -45,3 +45,44 @@ railway-verify=8a547822c4e53ccf5837984d19c963c9771bf0f6487b1f2fd446cab10f38b2b3
 - but he worked until next day 9am
 - between this hours he falls Break (Mins) for lunch,dinner and break fast 
 - in this how habdle 3 meal breaks 
+
+
+The 
+
+LeaveType
+ model got a new is_active column — you'll need to run a DB migration (or restart with --reload if using SQLite auto-create) for the Leave Types CRUD to fully work in production.
+
+What would you like to work on today? Some possible areas:
+
+Leave Entitlements — configure how many days each employee gets per type per year
+Employee Dashboard — let employees see their own leave balance & history
+Payroll integration — connect leave data to payslip deductions
+Something else entirely?
+
+
+
+Standard leave request lifecycle
+-HR / Entity Admin configures leave_types (AL, ML, HL, CL …) per entity.
+-On employee onboarding, system calculates statutory annual leave (staircase) and grants it on Jan 1 or anniversary.
+-Each year on 1 Jan: Celery task grants statutory annual leave for all employees based on their join_date.
+-Employee applies for leave (status: pending)
+-Manager reviews and approves/rejects
+-If approved, leave is deducted from employee's balance
+-If rejected, no deduction is made 
+-leave_entitlements links to employment_id. 
+-A person working at 2 entities gets 2 separate leave ledgers — one per job.
+
+
+
+Phase 1 (Foundation)
+  ├── statutory_leave_rules table + seed MOM data
+  ├── leave_pools table (replace SICK/HOSP hardcode)
+  └── Engine refactor to use DB rules
+Phase 2 (Lifecycle Completion)
+  ├── Jan 1 Celery/APScheduler task
+  ├── carry_policies + carry-forward computation
+  └── Auto-grant on onboarding
+Phase 3 (Advanced)
+  ├── family_links + SPL cross-person pool
+  ├── GPPL/Paternity birth-date logic
+  └── Admin UI for managing rules tables
