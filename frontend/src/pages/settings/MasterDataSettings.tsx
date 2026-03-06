@@ -53,6 +53,8 @@ const MasterDataSettings: React.FC = () => {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<any | null>(null);
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const [deleteConfirmItem, setDeleteConfirmItem] = useState<any | null>(null);
 
     // Form state (shared)
     const [name, setName] = useState('');
@@ -161,14 +163,19 @@ const MasterDataSettings: React.FC = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!activeEntityId || !window.confirm('Are you sure you want to deactivate this item?')) return;
+    const handleDeletePrompt = (item: any) => {
+        setDeleteConfirmItem(item);
+    };
+
+    const confirmDelete = async () => {
+        if (!activeEntityId || !deleteConfirmItem) return;
         try {
             if (isLeaveTab) {
-                await api.delete(`/api/v1/leave/types/${id}?entity_id=${activeEntityId}`);
+                await api.delete(`/api/v1/leave/types/${deleteConfirmItem.id}?entity_id=${activeEntityId}`);
             } else {
-                await api.delete(`/api/v1/masters/${activeTab}/${id}?entity_id=${activeEntityId}`);
+                await api.delete(`/api/v1/masters/${activeTab}/${deleteConfirmItem.id}?entity_id=${activeEntityId}`);
             }
+            setDeleteConfirmItem(null);
             fetchItems();
         } catch (err: any) {
             setError(err.response?.data?.detail || 'Failed to delete item');
@@ -234,15 +241,41 @@ const MasterDataSettings: React.FC = () => {
                     })}
                 </div>
 
-                <div className="relative flex-1 group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder={`Search ${activeTabInfo.label.toLowerCase()}...`}
-                        className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] shadow-sm focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-medium text-dark-950 dark:text-gray-50"
-                    />
+                <div className="flex-1 flex flex-col sm:flex-row gap-4">
+                    <div className="relative flex-1 group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder={`Search ${activeTabInfo.label.toLowerCase()}...`}
+                            className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] shadow-sm focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-medium text-dark-950 dark:text-gray-50"
+                        />
+                    </div>
+                    <div className="flex p-1.5 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-[24px] shadow-sm sm:h-[58px]">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={clsx(
+                                "flex-1 sm:flex-none p-3 rounded-[16px] transition-all flex justify-center",
+                                viewMode === 'grid'
+                                    ? "bg-gray-100 dark:bg-gray-800 text-primary-600 shadow-sm"
+                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            )}
+                        >
+                            <LayoutGrid className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={clsx(
+                                "flex-1 sm:flex-none p-3 rounded-[16px] transition-all flex justify-center",
+                                viewMode === 'list'
+                                    ? "bg-gray-100 dark:bg-gray-800 text-primary-600 shadow-sm"
+                                    : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            )}
+                        >
+                            <List className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -266,6 +299,74 @@ const MasterDataSettings: React.FC = () => {
                     </div>
                     <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">No {activeTabInfo.label} Found</h3>
                     <p className="text-gray-500 dark:text-gray-400 mt-2 max-w-xs mx-auto">Try refining your search or add a new record to get started.</p>
+                </div>
+            ) : viewMode === 'list' ? (
+                <div className="space-y-3">
+                    <AnimatePresence mode="popLayout">
+                        {filteredItems.map((item) => (
+                            <motion.div
+                                layout
+                                initial={{ opacity: 0, scale: 0.98 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.98 }}
+                                key={item.id}
+                                className="group flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-gray-900 rounded-[24px] border border-gray-100 dark:border-gray-800 p-4 shadow-sm hover:shadow-xl hover:shadow-primary-600/5 hover:-translate-y-0.5 transition-all duration-300"
+                            >
+                                <div className="flex items-center gap-5">
+                                    <div className={clsx("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 hidden sm:flex", activeTabInfo.bg)}>
+                                        <activeTabInfo.icon className={clsx("w-6 h-6", activeTabInfo.color)} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 group-hover:text-primary-600 transition-colors tracking-tight line-clamp-1">{item.name}</h3>
+                                            <span className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-[10px] font-bold text-gray-500 uppercase tracking-wider shrink-0">{item.code || 'NO CODE'}</span>
+
+                                            {isLeaveTab && (
+                                                <div className="flex gap-2">
+                                                    <span className={clsx(
+                                                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold",
+                                                        item.is_paid ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" : "bg-gray-100 dark:bg-gray-800 text-gray-400"
+                                                    )}>
+                                                        {item.is_paid ? 'Paid' : 'Unpaid'}
+                                                    </span>
+                                                    {item.is_statutory && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
+                                                            MOM Statutory
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {activeTab === 'customers' ? (
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                                                <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {item.contact_name || 'No Contact'}</span>
+                                                <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> <span className="truncate max-w-[120px] sm:max-w-[200px]">{item.contact_email || 'No Email'}</span></span>
+                                                <span className="flex items-center gap-1.5 truncate max-w-[150px] sm:max-w-[250px]"><MapPin className="w-3.5 h-3.5" /> {item.billing_address || 'No Address'}</span>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium truncate max-w-[250px] sm:max-w-xl">
+                                                {item.description || 'No detailed description provided.'}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 mt-4 sm:mt-0 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity self-end sm:self-auto shrink-0">
+                                    <button
+                                        onClick={() => handleOpenModal(item)}
+                                        className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-all"
+                                    >
+                                        <Pencil className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeletePrompt(item)}
+                                        className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
@@ -291,7 +392,7 @@ const MasterDataSettings: React.FC = () => {
                                             <Pencil className="w-4 h-4" />
                                         </button>
                                         <button
-                                            onClick={() => handleDelete(item.id)}
+                                            onClick={() => handleDeletePrompt(item)}
                                             className="p-3 text-gray-400 dark:text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-2xl transition-all"
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -529,6 +630,48 @@ const MasterDataSettings: React.FC = () => {
                                     </button>
                                 </div>
                             </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Custom Delete Confirmation Modal */}
+            <AnimatePresence>
+                {deleteConfirmItem && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-950/40 backdrop-blur-md"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.95, y: 20 }}
+                            className="bg-white dark:bg-gray-900 rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 dark:border-gray-800 p-8 text-center"
+                        >
+                            <div className="w-20 h-20 rounded-[24px] bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/30 flex items-center justify-center mx-auto mb-6">
+                                <Trash2 className="w-10 h-10 text-rose-500" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-dark-950 dark:text-gray-50 mb-2">Confirm Deletion</h3>
+                            <p className="text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">
+                                Are you sure you want to deactivate <strong className="text-dark-950 dark:text-gray-200">{deleteConfirmItem.name}</strong>? This action will hide it from active selections.
+                            </p>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    onClick={() => setDeleteConfirmItem(null)}
+                                    className="flex-1 py-3.5 px-4 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-2xl transition-all active:scale-[0.98]"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="flex-1 py-3.5 px-4 text-sm font-bold text-white bg-rose-500 hover:bg-rose-600 rounded-2xl shadow-lg shadow-rose-200 dark:shadow-rose-900/30 transition-all active:scale-[0.98]"
+                                >
+                                    Yes, Delete
+                                </button>
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}
