@@ -17,6 +17,7 @@ class PayrollEngine:
         ot_hours_1_5x: Decimal = Decimal("0"),
         ot_hours_2x: Decimal = Decimal("0"),
         allowances: Decimal = Decimal("0"),
+        deductions: Decimal = Decimal("0"),
         bonus: Decimal = Decimal("0"),
         unpaid_leave_days: Decimal = Decimal("0"),
         working_days_in_month: int = 22,
@@ -77,7 +78,7 @@ class PayrollEngine:
         sdl_contribution = statutory_funds_engine.calculate_sdl(gross_pay)
         
         # 5. Calculate Net Pay
-        net_pay = gross_pay - cpf_ee - shg_deduction
+        net_pay = gross_pay - cpf_ee - shg_deduction - deductions
         
         return {
             "basic_salary": basic_salary,

@@ -23,7 +23,9 @@ import {
     Clock,
     Hash,
     Tag,
-    Layers
+    Layers,
+    Plus,
+    Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -103,7 +105,8 @@ const AddEmployee = () => {
             account_name: '',
             account_number: '',
             is_default: true
-        }
+        },
+        salary_components: [] as any[]
     });
 
     // Sync entity ID and fetch master data
@@ -180,6 +183,7 @@ const AddEmployee = () => {
     const validateStep2 = (): boolean => {
         const errors: Record<string, string> = {};
         const requiredFields = [
+            { key: 'employee_code', label: 'Employee Code' },
             { key: 'department_id', label: 'Department' },
             { key: 'designation', label: 'Designation' },
             { key: 'group_id', label: 'Employment Group' },
@@ -222,9 +226,50 @@ const AddEmployee = () => {
         return Object.keys(errors).length === 0;
     };
 
-    const handleNext = () => {
-        if (step === 1 && !validateStep1()) return;
-        if (step === 2 && !validateStep2()) return;
+    const handleNext = async () => {
+        if (step === 1) {
+            if (!validateStep1()) return;
+            setLoading(true);
+            try {
+                const res = await api.get('/api/v1/employees/check-nric', { params: { nric: formData.person.nric_fin } });
+                if (res.data.is_duplicate) {
+                    const msg = "NRIC/FIN already exists for this tenant.";
+                    toast.error(msg);
+                    setFormErrors(prev => ({ ...prev, nric_fin: msg }));
+                    setLoading(false);
+                    return;
+                }
+            } catch (error) {
+                console.error("Check NRIC failed", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        if (step === 2) {
+            if (!validateStep2()) return;
+            setLoading(true);
+            try {
+                const res = await api.get('/api/v1/employees/check-code', {
+                    params: {
+                        code: formData.employment.employee_code,
+                        entity_id: formData.employment.entity_id
+                    }
+                });
+                if (res.data.is_duplicate) {
+                    const msg = `Employee Code '${formData.employment.employee_code}' already exists for this entity.`;
+                    toast.error(msg);
+                    setFormErrors(prev => ({ ...prev, employee_code: msg }));
+                    setLoading(false);
+                    return;
+                }
+            } catch (error) {
+                console.error("Check Code failed", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
         setStep(s => Math.min(3, s + 1));
     };
 
@@ -256,12 +301,25 @@ const AddEmployee = () => {
             ),
             bank_account: Object.fromEntries(
                 Object.entries(formData.bank_account).map(([k, v]) => [k, sanitizeValue(v)])
-            )
+            ),
+            salary_components: (formData.salary_components || []).map(comp => ({
+                component: comp.component,
+                amount: comp.amount,
+                category: comp.category,
+                effective_date: comp.effective_date,
+                is_taxable: comp.is_taxable,
+                is_cpf_liable: comp.is_cpf_liable
+            }))
         };
 
         try {
             await api.post('/api/v1/employees', sanitizedData);
-            navigate('/employees');
+            toast.success('Employee and employment details created successfully!');
+
+            // Small delay to ensure the user sees the success state before redirecting
+            setTimeout(() => {
+                navigate('/employees');
+            }, 500);
         } catch (error: any) {
             console.error("Failed to create employee", error);
 
@@ -710,14 +768,15 @@ const AddEmployee = () => {
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Employee Code (SKU)</label>
+                                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Employee Code (SKU){req}</label>
                                     <input
                                         type="text"
-                                        className="input-field"
+                                        className={clsx('input-field', formErrors.employee_code && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
                                         placeholder="EMP-001"
                                         value={formData.employment.employee_code}
                                         onChange={(e) => handleInputChange('employment', 'employee_code', e.target.value)}
                                     />
+                                    {fieldError('employee_code')}
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Job Title</label>
@@ -752,15 +811,6 @@ const AddEmployee = () => {
                                         value={formData.employment.join_date}
                                         onChange={(v) => handleInputChange('employment', 'join_date', v)}
                                         placeholder="Select join date"
-                                        icon={Calendar}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Cessation Date</label>
-                                    <DatePicker
-                                        value={formData.employment.cessation_date}
-                                        onChange={(v) => handleInputChange('employment', 'cessation_date', v)}
-                                        placeholder="Select cessation date"
                                         icon={Calendar}
                                     />
                                 </div>
@@ -1021,6 +1071,106 @@ const AddEmployee = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Fixed Allowances & Deductions Section */}
+                            <div className="pt-8 border-t border-gray-100 dark:border-gray-800">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 font-premium">Recurring Allowances & Deductions</h3>
+                                        <p className="text-sm text-gray-500">Fixed monthly adjustments to gross/net pay</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newComp = {
+                                                id: Math.random().toString(36).substr(2, 9),
+                                                component: 'Fixed Allowance',
+                                                amount: 0,
+                                                category: 'allowance',
+                                                effective_date: formData.employment.join_date,
+                                                is_taxable: true,
+                                                is_cpf_liable: true
+                                            };
+                                            setFormData({ ...formData, salary_components: [...formData.salary_components, newComp] });
+                                        }}
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-bold transition-all shadow-sm"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add Component
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {formData.salary_components.length === 0 ? (
+                                        <div className="text-center py-10 bg-gray-50 dark:bg-gray-800/20 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800">
+                                            <Layers className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                            <p className="text-sm text-gray-500">No recurring allowances or deductions added.</p>
+                                        </div>
+                                    ) : (
+                                        formData.salary_components.map((comp, idx) => (
+                                            <div key={comp.id || idx} className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col md:flex-row gap-4 items-end">
+                                                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Category</label>
+                                                        <select
+                                                            value={comp.category}
+                                                            onChange={(e) => {
+                                                                const newList = [...formData.salary_components];
+                                                                newList[idx].category = e.target.value;
+                                                                setFormData({ ...formData, salary_components: newList });
+                                                            }}
+                                                            className="input-field py-2 text-sm"
+                                                        >
+                                                            <option value="allowance">Allowance (+)</option>
+                                                            <option value="deduction">Deduction (-)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Component Name</label>
+                                                        <input
+                                                            type="text"
+                                                            value={comp.component}
+                                                            onChange={(e) => {
+                                                                const newList = [...formData.salary_components];
+                                                                newList[idx].component = e.target.value;
+                                                                setFormData({ ...formData, salary_components: newList });
+                                                            }}
+                                                            placeholder="e.g. Transport Allowance"
+                                                            className="input-field py-2 text-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Amount (SGD)</label>
+                                                        <div className="relative">
+                                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                            <input
+                                                                type="number"
+                                                                value={comp.amount}
+                                                                onChange={(e) => {
+                                                                    const newList = [...formData.salary_components];
+                                                                    newList[idx].amount = parseFloat(e.target.value) || 0;
+                                                                    setFormData({ ...formData, salary_components: newList });
+                                                                }}
+                                                                className="input-field py-2 pl-10 text-sm font-bold"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newList = formData.salary_components.filter((_, i) => i !== idx);
+                                                        setFormData({ ...formData, salary_components: newList });
+                                                    }}
+                                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1042,10 +1192,17 @@ const AddEmployee = () => {
                     {step < 3 ? (
                         <button
                             onClick={handleNext}
+                            disabled={loading}
                             className="btn btn-primary flex items-center justify-center gap-2 py-3 px-8 shadow-lg shadow-primary-200 w-full sm:w-auto"
                         >
-                            Next Step
-                            <ChevronRight className="w-5 h-5" />
+                            {loading ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    Next Step
+                                    <ChevronRight className="w-5 h-5" />
+                                </>
+                            )}
                         </button>
                     ) : (
                         <button

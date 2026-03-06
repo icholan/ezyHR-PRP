@@ -9,6 +9,7 @@ from .attendance import Shift, ShiftRoster, AttendanceRecord, MonthlyOTSummary, 
 from .ai import AIAuditFlag, AIChatSession, AIAttritionScore
 from .tax_claims import IR8ARecord, ClaimApplication, WorkPass
 from .system import Subscription, AuditLog, Notification, DocumentStorage
+from .ket import KeyEmploymentTerm
 
 __all__ = [
     "Base",
@@ -22,5 +23,6 @@ __all__ = [
     "Shift", "ShiftRoster", "AttendanceRecord", "MonthlyOTSummary", "PublicHoliday",
     "AIAuditFlag", "AIChatSession", "AIAttritionScore",
     "IR8ARecord", "ClaimApplication", "WorkPass",
-    "Subscription", "AuditLog", "Notification", "DocumentStorage"
+    "Subscription", "AuditLog", "Notification", "DocumentStorage",
+    "KeyEmploymentTerm"
 ]

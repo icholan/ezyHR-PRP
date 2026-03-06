@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.platform import auth as platform_auth
-from app.api.v1 import auth, payroll, reporting, employees, attendance, leave, users, entities, roles, masters
+from app.api.v1 import auth, payroll, reporting, employees, attendance, leave, users, entities, roles, masters, ket
 import os
 
 app = FastAPI(
@@ -44,6 +44,7 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(entities.router, prefix="/api/v1", tags=["Entities"])
 app.include_router(roles.router, prefix="/api/v1", tags=["Roles & Permissions"])
 app.include_router(masters.router, prefix="/api/v1/masters", tags=["Master Data"])
+app.include_router(ket.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():

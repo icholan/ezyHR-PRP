@@ -18,6 +18,7 @@ class PayrollRecordBase(BaseModel):
     sdl_contribution: Decimal = Decimal("0")
     gross_salary: Decimal = Decimal("0")
     net_salary: Decimal = Decimal("0")
+    breakdown: Optional[dict] = None
 
 class PayrollRecordCreate(PayrollRecordBase):
     payroll_run_id: UUID
@@ -53,3 +54,19 @@ class PayrollRunResponse(PayrollRunBase):
 
 class PayrollRunDetail(PayrollRunResponse):
     records: List[PayrollRecordResponse]
+
+class SalaryComponentBase(BaseModel):
+    component: str
+    amount: Decimal
+    category: str = "allowance" # allowance | deduction
+    is_taxable: bool = True
+    is_cpf_liable: bool = True
+    effective_date: date
+    end_date: Optional[date] = None
+
+class SalaryComponentCreate(SalaryComponentBase):
+    employment_id: UUID
+
+class SalaryComponentResponse(SalaryComponentBase):
+    id: UUID
+    model_config = ConfigDict(from_attributes=True)

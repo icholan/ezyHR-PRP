@@ -62,6 +62,17 @@ class EmploymentBase(BaseModel):
     basic_salary: float = 0.0
     payment_mode: str = "bank_transfer"
     is_ot_eligible: bool = True
+    ot_rate: float = 1.5
+    salary_period: str = "monthly"
+    ot_payment_period: str = "monthly"
+    job_responsibilities: Optional[str] = None
+    probation_period: Optional[str] = None
+    notice_period: Optional[str] = None
+    work_location: Optional[str] = None
+    medical_benefits: Optional[str] = None
+    dental_benefits: Optional[str] = None
+    insurance_benefits: Optional[str] = None
+    other_benefits: Optional[str] = None
     is_active: bool = True
 
 class EmploymentCreate(EmploymentBase):
@@ -123,6 +134,7 @@ class EmployeeDetailPerson(BaseModel):
 
 class EmployeeDetailEmployment(BaseModel):
     id: uuid.UUID
+    entity_id: uuid.UUID
     employee_code: Optional[str] = None
     employment_type: str
     job_title: Optional[str] = None
@@ -148,6 +160,17 @@ class EmployeeDetailEmployment(BaseModel):
     basic_salary: float
     payment_mode: str
     is_ot_eligible: bool
+    ot_rate: float
+    salary_period: str
+    ot_payment_period: str
+    job_responsibilities: Optional[str] = None
+    probation_period: Optional[str] = None
+    notice_period: Optional[str] = None
+    work_location: Optional[str] = None
+    medical_benefits: Optional[str] = None
+    dental_benefits: Optional[str] = None
+    insurance_benefits: Optional[str] = None
+    other_benefits: Optional[str] = None
     is_active: bool
 
 class EmployeeDetailBank(BaseModel):
@@ -157,11 +180,41 @@ class EmployeeDetailBank(BaseModel):
     account_number_masked: str
     is_default: bool
 
+class SalaryComponentRead(BaseModel):
+    id: uuid.UUID
+    component: str
+    amount: float
+    category: str
+    is_taxable: bool
+    is_cpf_liable: bool
+    effective_date: date
+    end_date: Optional[date] = None
+
+    class Config:
+        from_attributes = True
+
+class SalaryComponentCreateLocal(BaseModel):
+    component: str
+    amount: float
+    category: str = "allowance"
+    is_taxable: bool = True
+    is_cpf_liable: bool = True
+    effective_date: date
+    end_date: Optional[date] = None
+
 class EmployeeDetail(BaseModel):
     person: EmployeeDetailPerson
     employment: EmployeeDetailEmployment
     bank_account: Optional[EmployeeDetailBank] = None
+    salary_components: List[SalaryComponentRead] = []
+
+class EmployeeFullCreate(BaseModel):
+    person: PersonCreate
+    employment: EmploymentCreate
+    bank_account: Optional[BankAccountCreate] = None
+    salary_components: List[SalaryComponentCreateLocal] = []
 
 class EmployeeFullUpdate(BaseModel):
     person: Optional[PersonUpdate] = None
     employment: Optional[EmploymentUpdate] = None
+    salary_components: Optional[List[SalaryComponentCreateLocal]] = None

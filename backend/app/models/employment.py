@@ -125,6 +125,22 @@ class Employment(Base, IDMixin, TimestampMixin):
     payment_mode: Mapped[str] = mapped_column(String(20), default="bank_transfer")
     bank_account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bank_accounts.id"), nullable=True)
     is_ot_eligible: Mapped[bool] = mapped_column(Boolean, default=True)
+    ot_rate: Mapped[float] = mapped_column(Numeric(3, 2), server_default="1.5", default=1.5)
+    salary_period: Mapped[str] = mapped_column(String(20), server_default="monthly", default="monthly")
+    ot_payment_period: Mapped[str] = mapped_column(String(20), server_default="monthly", default="monthly")
+    
+    # KET Specifics
+    job_responsibilities: Mapped[str] = mapped_column(Text, nullable=True)
+    probation_period: Mapped[str] = mapped_column(String(50), nullable=True)
+    notice_period: Mapped[str] = mapped_column(String(50), nullable=True)
+    work_location: Mapped[str] = mapped_column(Text, nullable=True)
+    
+    # Medical & Other Benefits
+    medical_benefits: Mapped[str] = mapped_column(Text, nullable=True)
+    dental_benefits: Mapped[str] = mapped_column(Text, nullable=True)
+    insurance_benefits: Mapped[str] = mapped_column(Text, nullable=True)
+    other_benefits: Mapped[str] = mapped_column(Text, nullable=True)
+    
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     __table_args__ = (

@@ -3,11 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
     ChevronLeft, Edit3, Save, X, UserX, User, Briefcase,
     CreditCard, Mail, Phone, MapPin, Calendar, Building2,
-    DollarSign, Shield, Clock, BadgeCheck, XCircle, AlertTriangle
+    DollarSign, Shield, Clock, BadgeCheck, XCircle, AlertTriangle,
+    Plus, Trash2, Layers
 } from 'lucide-react';
 import api from '../services/api';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
+import SearchableSelect from '../components/Common/SearchableSelect';
+import DatePicker from '../components/DatePicker';
 
 interface PersonDetail {
     id: string;
@@ -23,6 +26,7 @@ interface PersonDetail {
     whatsapp_number: string | null;
     personal_email: string | null;
     highest_education: string | null;
+    language: string | null;
     pr_start_date: string | null;
     work_pass_start: string | null;
     address: string | null;
@@ -30,6 +34,7 @@ interface PersonDetail {
 
 interface EmploymentDetail {
     id: string;
+    entity_id: string;
     employee_code: string | null;
     employment_type: string;
     job_title: string | null;
@@ -66,10 +71,22 @@ interface BankDetail {
     is_default: boolean;
 }
 
+interface SalaryComponent {
+    id?: string;
+    component: string;
+    amount: number;
+    category: string;
+    is_taxable: boolean;
+    is_cpf_liable: boolean;
+    effective_date: string;
+    end_date?: string | null;
+}
+
 interface EmployeeData {
     person: PersonDetail;
     employment: EmploymentDetail;
     bank_account: BankDetail | null;
+    salary_components: SalaryComponent[];
 }
 
 type TabId = 'overview' | 'employment' | 'financial' | 'leave';
@@ -81,15 +98,6 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: 'leave', label: 'Leave Balances', icon: Calendar },
 ];
 
-const CITIZENSHIP_LABELS: Record<string, string> = {
-    citizen: 'Singapore Citizen',
-    pr: 'Permanent Resident',
-    ep: 'Employment Pass',
-    s_pass: 'S Pass',
-    wp: 'Work Permit',
-    dp: 'Dependant Pass',
-    ltvp: 'LTVP',
-};
 
 const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
     full_time: 'Full Time',
@@ -129,6 +137,32 @@ const EmployeeProfile = () => {
     // Editable copies
     const [editPerson, setEditPerson] = useState<Partial<PersonDetail>>({});
     const [editEmployment, setEditEmployment] = useState<Partial<EmploymentDetail>>({});
+    const [editSalaryComponents, setEditSalaryComponents] = useState<SalaryComponent[]>([]);
+
+    // Master data
+    const [departments, setDepartments] = useState<any[]>([]);
+    const [grades, setGrades] = useState<any[]>([]);
+    const [groups, setGroups] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (data?.employment?.entity_id) {
+            const fetchMasters = async () => {
+                try {
+                    const [deptsRes, gradesRes, groupsRes] = await Promise.all([
+                        api.get('/api/v1/masters/departments', { params: { entity_id: data.employment.entity_id } }),
+                        api.get('/api/v1/masters/grades', { params: { entity_id: data.employment.entity_id } }),
+                        api.get('/api/v1/masters/groups', { params: { entity_id: data.employment.entity_id } })
+                    ]);
+                    setDepartments(deptsRes.data || []);
+                    setGrades(gradesRes.data || []);
+                    setGroups(groupsRes.data || []);
+                } catch (error) {
+                    console.error('Error fetching master data:', error);
+                }
+            };
+            fetchMasters();
+        }
+    }, [data?.employment?.entity_id]);
 
     useEffect(() => {
         const fetchDetail = async () => {
@@ -168,6 +202,7 @@ const EmployeeProfile = () => {
         if (!data) return;
         setEditPerson({ ...data.person });
         setEditEmployment({ ...data.employment });
+        setEditSalaryComponents([...(data.salary_components || [])]);
         setEditing(true);
     };
 
@@ -175,6 +210,7 @@ const EmployeeProfile = () => {
         setEditing(false);
         setEditPerson({});
         setEditEmployment({});
+        setEditSalaryComponents([]);
     };
 
     const handleSave = async () => {
@@ -202,6 +238,7 @@ const EmployeeProfile = () => {
             }
 
             // Only send changed employment fields
+            // Only send changed employment fields
             const empChanges: any = {};
             for (const key of Object.keys(editEmployment) as (keyof EmploymentDetail)[]) {
                 if (key === 'id' || key === 'department_name') continue;
@@ -212,6 +249,18 @@ const EmployeeProfile = () => {
             if (Object.keys(empChanges).length > 0) {
                 payload.employment = empChanges;
             }
+
+            // Salary components are synced as a whole if changed
+            // For simplicity, we send them if we are in edit mode
+            payload.salary_components = editSalaryComponents.map(sc => ({
+                component: sc.component,
+                amount: sc.amount,
+                category: sc.category,
+                is_taxable: sc.is_taxable,
+                is_cpf_liable: sc.is_cpf_liable,
+                effective_date: sc.effective_date,
+                end_date: sc.end_date
+            }));
 
             const resp = await api.put(`/api/v1/employees/${id}`, payload);
             setData(resp.data);
@@ -254,7 +303,17 @@ const EmployeeProfile = () => {
 
     const updateField = (section: 'person' | 'employment', key: string, value: any) => {
         if (section === 'person') {
-            setEditPerson(prev => ({ ...prev, [key]: value }));
+            setEditPerson(prev => {
+                const updated = { ...prev, [key]: value };
+                // Sync citizenship_type when nationality changes
+                if (key === 'nationality') {
+                    let citizenship = 'foreigner';
+                    if (value === 'Singapore Citizen') citizenship = 'citizen';
+                    else if (value === 'SPR') citizenship = 'pr';
+                    setEditEmployment(e => ({ ...e, citizenship_type: citizenship }));
+                }
+                return updated;
+            });
         } else {
             setEditEmployment(prev => ({ ...prev, [key]: value }));
         }
@@ -373,7 +432,6 @@ const EmployeeProfile = () => {
                         { label: 'Department', value: employment.department_name || 'Unassigned', icon: Building2 },
                         { label: 'Join Date', value: formatDate(employment.join_date), icon: Calendar },
                         { label: 'Employment', value: EMPLOYMENT_TYPE_LABELS[employment.employment_type] || employment.employment_type, icon: Briefcase },
-                        { label: 'Citizenship', value: CITIZENSHIP_LABELS[employment.citizenship_type] || employment.citizenship_type, icon: Shield },
                     ].map((stat, i) => (
                         <div key={i} className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 flex items-center gap-3 border border-transparent dark:border-gray-800">
                             <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 flex items-center justify-center shrink-0">
@@ -421,14 +479,99 @@ const EmployeeProfile = () => {
                             <Field label="WhatsApp Number" icon={Phone} value={fieldValue('person', 'whatsapp_number')} editing={editing} onChange={v => updateField('person', 'whatsapp_number', v)} />
                             <Field label="Date of Birth" icon={Calendar} value={editing ? fieldValue('person', 'date_of_birth') : formatDate(person.date_of_birth)} editing={editing} type="date" onChange={v => updateField('person', 'date_of_birth', v)} />
                             <SelectField label="Gender" value={fieldValue('person', 'gender')} editing={editing} onChange={v => updateField('person', 'gender', v)} options={[{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }]} />
-                            <Field label="Nationality" value={fieldValue('person', 'nationality')} editing={editing} onChange={v => updateField('person', 'nationality', v)} />
-                            <Field label="Race" value={fieldValue('person', 'race')} editing={editing} onChange={v => updateField('person', 'race', v)} />
-                            <Field label="Highest Education" value={fieldValue('person', 'highest_education')} editing={editing} onChange={v => updateField('person', 'highest_education', v)} />
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Nationality</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: 'Singapore Citizen', label: 'Singapore Citizen' },
+                                            { id: 'SPR', label: 'SPR (Permanent Resident)' },
+                                            { id: 'Foreigner', label: 'Foreigner' }
+                                        ]}
+                                        value={fieldValue('person', 'nationality')}
+                                        onChange={v => updateField('person', 'nationality', v)}
+                                        placeholder="Select Nationality"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{person.nationality || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Race</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: 'Chinese', label: 'Chinese' },
+                                            { id: 'Malay', label: 'Malay' },
+                                            { id: 'Indian', label: 'Indian' },
+                                            { id: 'Eurasian', label: 'Eurasian' },
+                                            { id: 'Others', label: 'Others' }
+                                        ]}
+                                        value={fieldValue('person', 'race')}
+                                        onChange={v => updateField('person', 'race', v)}
+                                        placeholder="Select Race"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{person.race || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Highest Education</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Education Level' },
+                                            { id: 'Below Secondary', label: 'Below Secondary' },
+                                            { id: 'Secondary', label: 'Secondary' },
+                                            { id: 'Post Secondary (Non-Tertiary)', label: 'Post Secondary (Non-Tertiary)' },
+                                            { id: 'Diploma', label: 'Diploma' },
+                                            { id: 'Professional Qualification', label: 'Professional Qualification' },
+                                            { id: "Bachelor's Degree", label: "Bachelor's Degree" },
+                                            { id: 'Postgraduate Diploma', label: 'Postgraduate Diploma' },
+                                            { id: "Master's Degree", label: "Master's Degree" },
+                                            { id: 'Doctorate', label: 'Doctorate' }
+                                        ]}
+                                        value={fieldValue('person', 'highest_education')}
+                                        onChange={v => updateField('person', 'highest_education', v)}
+                                        placeholder="Select Education Level"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{person.highest_education || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Language</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Language' },
+                                            { id: 'English', label: 'English' },
+                                            { id: 'Mandarin', label: 'Mandarin' },
+                                            { id: 'Malay', label: 'Malay' },
+                                            { id: 'Tamil', label: 'Tamil' },
+                                            { id: 'Others', label: 'Others' }
+                                        ]}
+                                        value={fieldValue('person', 'language')}
+                                        onChange={v => updateField('person', 'language', v)}
+                                        placeholder="Select Language"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{person.language || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
                             {person.nationality === 'SPR' && (
                                 <Field label="PR Start Date" icon={Calendar} value={editing ? fieldValue('person', 'pr_start_date') : formatDate(person.pr_start_date)} editing={editing} type="date" onChange={v => updateField('person', 'pr_start_date', v)} />
-                            )}
-                            {person.nationality === 'Foreigner' && (
-                                <Field label="Work Pass Start Date" icon={Calendar} value={editing ? fieldValue('person', 'work_pass_start') : formatDate(person.work_pass_start)} editing={editing} type="date" onChange={v => updateField('person', 'work_pass_start', v)} />
                             )}
                         </div>
                         <div>
@@ -451,12 +594,71 @@ const EmployeeProfile = () => {
                             <Field label="Employee Code" value={fieldValue('employment', 'employee_code')} editing={editing} onChange={v => updateField('employment', 'employee_code', v)} />
                             <Field label="Job Title" icon={Briefcase} value={fieldValue('employment', 'job_title')} editing={editing} onChange={v => updateField('employment', 'job_title', v)} />
                             <Field label="Designation" value={fieldValue('employment', 'designation')} editing={editing} onChange={v => updateField('employment', 'designation', v)} />
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Department</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Department' },
+                                            ...departments.map(d => ({ id: d.id, label: d.name }))
+                                        ]}
+                                        value={fieldValue('employment', 'department_id')}
+                                        onChange={v => updateField('employment', 'department_id', v)}
+                                        placeholder="Select Department"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{employment.department_name || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Employment Group</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Group' },
+                                            ...groups.map(g => ({ id: g.id, label: g.name }))
+                                        ]}
+                                        value={fieldValue('employment', 'group_id')}
+                                        onChange={v => updateField('employment', 'group_id', v)}
+                                        placeholder="Select Group"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{groups.find(g => g.id === employment.group_id)?.name || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Grade</label>
+                                {editing ? (
+                                    <SearchableSelect
+                                        options={[
+                                            { id: '', label: 'Select Grade' },
+                                            ...grades.map(g => ({ id: g.id, label: g.name }))
+                                        ]}
+                                        value={fieldValue('employment', 'grade_id')}
+                                        onChange={v => updateField('employment', 'grade_id', v)}
+                                        placeholder="Select Grade"
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                        <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{grades.find(g => g.id === employment.grade_id)?.name || '—'}</span>
+                                    </div>
+                                )}
+                            </div>
+
                             <SelectField label="Employment Type" value={fieldValue('employment', 'employment_type')} editing={editing} onChange={v => updateField('employment', 'employment_type', v)} options={Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
-                            <SelectField label="Citizenship / Pass" value={fieldValue('employment', 'citizenship_type')} editing={editing} onChange={v => updateField('employment', 'citizenship_type', v)} options={Object.entries(CITIZENSHIP_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
                             <Field label="Join Date" icon={Calendar} value={editing ? fieldValue('employment', 'join_date') : formatDate(employment.join_date)} editing={editing} type="date" onChange={v => updateField('employment', 'join_date', v)} />
                             <Field label="Resign Date" icon={Calendar} value={editing ? (fieldValue('employment', 'resign_date') || '') : formatDate(employment.resign_date)} editing={editing} type="date" onChange={v => updateField('employment', 'resign_date', v)} />
                             <Field label="Cessation Date" icon={Calendar} value={editing ? (fieldValue('employment', 'cessation_date') || '') : formatDate(employment.cessation_date)} editing={editing} type="date" onChange={v => updateField('employment', 'cessation_date', v)} />
                             <Field label="Probation End" icon={Clock} value={editing ? (fieldValue('employment', 'probation_end_date') || '') : formatDate(employment.probation_end_date)} editing={editing} type="date" onChange={v => updateField('employment', 'probation_end_date', v)} />
+
+
                             <div className="flex items-center gap-3 pt-6">
                                 <input
                                     type="checkbox"
@@ -480,21 +682,36 @@ const EmployeeProfile = () => {
                             <Field label="Normal Work Hours Per Week" value={fieldValue('employment', 'normal_work_hours_per_week')} editing={editing} type="number" onChange={v => updateField('employment', 'normal_work_hours_per_week', parseFloat(v))} />
                         </div>
 
-                        {data.employment.citizenship_type !== 'citizen' && (
+                        {(editing ? editPerson.nationality === 'Foreigner' : person.nationality === 'Foreigner') && (
                             <>
                                 <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 pt-4">Work Pass & Levy</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <Field label="Work Pass Type" value={fieldValue('employment', 'work_pass_type')} editing={editing} onChange={v => updateField('employment', 'work_pass_type', v)} />
-                                    <Field label="Work Pass Number" value={fieldValue('employment', 'work_pass_no')} editing={editing} onChange={v => updateField('employment', 'work_pass_no', v)} />
-                                    <Field label="Work Pass Expiry" icon={Calendar} value={editing ? fieldValue('employment', 'work_pass_expiry') : formatDate(employment.work_pass_expiry)} editing={editing} type="date" onChange={v => updateField('employment', 'work_pass_expiry', v)} />
-                                    <Field
-                                        label="Foreign Worker Levy ($)"
-                                        icon={DollarSign}
-                                        value={editing ? fieldValue('employment', 'foreign_worker_levy') : `$${Number(employment.foreign_worker_levy || 0).toLocaleString('en-SG', { minimumFractionDigits: 2 })}`}
-                                        editing={editing}
-                                        type={editing ? 'number' : 'text'}
-                                        onChange={v => updateField('employment', 'foreign_worker_levy', parseFloat(v) || 0)}
-                                    />
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Work Pass Type</label>
+                                        {editing ? (
+                                            <SearchableSelect
+                                                options={[
+                                                    { id: '', label: 'Select Work Pass Type' },
+                                                    { id: 'Employment Pass', label: 'Employment Pass' },
+                                                    { id: 'S Pass', label: 'S Pass' },
+                                                    { id: 'Work Permit', label: 'Work Permit' },
+                                                    { id: 'Dependent Pass (with LOC)', label: 'Dependent Pass (with LOC)' },
+                                                    { id: 'Others', label: 'Others' }
+                                                ]}
+                                                value={fieldValue('employment', 'work_pass_type')}
+                                                onChange={v => updateField('employment', 'work_pass_type', v)}
+                                                placeholder="Select Type"
+                                            />
+                                        ) : (
+                                            <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl px-4 py-3 min-h-[48px]">
+                                                <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{employment.work_pass_type || '—'}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <Field label="Work Pass No" value={fieldValue('employment', 'work_pass_no')} editing={editing} onChange={v => updateField('employment', 'work_pass_no', v)} />
+                                    <Field label="Work Pass Start Date" icon={Calendar} value={editing ? (fieldValue('person', 'work_pass_start') || '') : formatDate(person.work_pass_start)} editing={editing} type="date" onChange={v => updateField('person', 'work_pass_start', v)} />
+                                    <Field label="Work Pass Expiry" icon={Calendar} value={editing ? (fieldValue('employment', 'work_pass_expiry') || '') : formatDate(employment.work_pass_expiry)} editing={editing} type="date" onChange={v => updateField('employment', 'work_pass_expiry', v)} />
+                                    <Field label="Foreign Worker Levy ($)" icon={DollarSign} type="number" value={fieldValue('employment', 'foreign_worker_levy')} editing={editing} onChange={v => updateField('employment', 'foreign_worker_levy', parseFloat(v) || 0)} />
                                 </div>
                             </>
                         )}
@@ -526,16 +743,136 @@ const EmployeeProfile = () => {
                             />
                         </div>
 
-                        <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 pt-4">Bank Account</h3>
-                        {bank_account ? (
+                        {/* Recurring Allowances & Deductions */}
+                        <div className="pt-8 border-t border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 font-premium">Recurring Allowances & Deductions</h3>
+                                    <p className="text-sm text-gray-500">Fixed monthly adjustments to gross/net pay</p>
+                                </div>
+                                {editing && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newComp: SalaryComponent = {
+                                                id: 'new-' + Math.random().toString(36).substr(2, 9),
+                                                component: 'Fixed Allowance',
+                                                amount: 0,
+                                                category: 'allowance',
+                                                effective_date: editEmployment.join_date || new Date().toISOString().split('T')[0],
+                                                is_taxable: true,
+                                                is_cpf_liable: true
+                                            };
+                                            setEditSalaryComponents([...editSalaryComponents, newComp]);
+                                        }}
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-bold transition-all shadow-sm"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add Component
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="space-y-3">
+                                {(editing ? editSalaryComponents : (data.salary_components || [])).length === 0 ? (
+                                    <div className="text-center py-10 bg-gray-50 dark:bg-gray-800/20 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800">
+                                        <Layers className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                        <p className="text-sm text-gray-500">No recurring allowances or deductions.</p>
+                                    </div>
+                                ) : (
+                                    (editing ? editSalaryComponents : data.salary_components).map((comp, idx) => (
+                                        <div key={comp.id || idx} className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col md:flex-row gap-4 items-end">
+                                            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Category</label>
+                                                    {editing ? (
+                                                        <select
+                                                            value={comp.category}
+                                                            onChange={(e) => {
+                                                                const newList = [...editSalaryComponents];
+                                                                newList[idx].category = e.target.value;
+                                                                setEditSalaryComponents(newList);
+                                                            }}
+                                                            className="input-field py-2 text-sm"
+                                                        >
+                                                            <option value="allowance">Allowance (+)</option>
+                                                            <option value="deduction">Deduction (-)</option>
+                                                        </select>
+                                                    ) : (
+                                                        <div className={clsx(
+                                                            "px-2 py-1 rounded-lg text-xs font-bold w-fit",
+                                                            comp.category === 'allowance' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                                                        )}>
+                                                            {comp.category === 'allowance' ? 'Allowance' : 'Deduction'}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Component Name</label>
+                                                    {editing ? (
+                                                        <input
+                                                            type="text"
+                                                            value={comp.component}
+                                                            onChange={(e) => {
+                                                                const newList = [...editSalaryComponents];
+                                                                newList[idx].component = e.target.value;
+                                                                setEditSalaryComponents(newList);
+                                                            }}
+                                                            className="input-field py-2 text-sm"
+                                                        />
+                                                    ) : (
+                                                        <p className="font-semibold text-dark-950 dark:text-gray-50">{comp.component}</p>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Amount (SGD)</label>
+                                                    {editing ? (
+                                                        <div className="relative">
+                                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                            <input
+                                                                type="number"
+                                                                value={comp.amount}
+                                                                onChange={(e) => {
+                                                                    const newList = [...editSalaryComponents];
+                                                                    newList[idx].amount = parseFloat(e.target.value) || 0;
+                                                                    setEditSalaryComponents(newList);
+                                                                }}
+                                                                className="input-field py-2 pl-10 text-sm font-bold"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <p className="font-bold text-dark-950 dark:text-gray-50">${Number(comp.amount).toLocaleString('en-SG', { minimumFractionDigits: 2 })}</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {editing && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newList = editSalaryComponents.filter((_, i) => i !== idx);
+                                                        setEditSalaryComponents(newList);
+                                                    }}
+                                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 pt-4 font-premium">Bank Account</h3>
+                        {data.bank_account ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <Field label="Bank Name" value={bank_account.bank_name} editing={false} disabled />
-                                <Field label="Account Holder" value={bank_account.account_name} editing={false} disabled />
-                                <Field label="Account Number (masked)" value={bank_account.account_number_masked} editing={false} disabled />
+                                <Field label="Bank Name" value={data.bank_account.bank_name} editing={false} disabled />
+                                <Field label="Account Holder" value={data.bank_account.account_name} editing={false} disabled />
+                                <Field label="Account Number (masked)" value={data.bank_account.account_number_masked} editing={false} disabled />
                                 <div className="flex items-center gap-2 pt-6">
-                                    <BadgeCheck className={clsx("w-5 h-5", bank_account.is_default ? "text-emerald-500" : "text-gray-300 dark:text-gray-600")} />
+                                    <BadgeCheck className={clsx("w-5 h-5", data.bank_account.is_default ? "text-emerald-500" : "text-gray-300 dark:text-gray-600")} />
                                     <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                                        {bank_account.is_default ? 'Default Account' : 'Not Default'}
+                                        {data.bank_account.is_default ? 'Default Account' : 'Not Default'}
                                     </span>
                                 </div>
                             </div>
@@ -597,46 +934,48 @@ const EmployeeProfile = () => {
             </div>
 
             {/* Deactivate Confirmation Modal */}
-            {showDeactivateModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowDeactivateModal(false)}>
-                    <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl border border-gray-100 dark:border-gray-800" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-                                <AlertTriangle className="w-7 h-7" />
+            {
+                showDeactivateModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowDeactivateModal(false)}>
+                        <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl border border-gray-100 dark:border-gray-800" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                                    <AlertTriangle className="w-7 h-7" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Deactivate Employee</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">This action can be reversed later.</p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Deactivate Employee</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">This action can be reversed later.</p>
+                            <p className="text-gray-600 dark:text-gray-300 mb-8">
+                                Are you sure you want to deactivate <strong>{person.full_name}</strong>?
+                                Their resign date will be set to today and their employment status will be marked as inactive.
+                            </p>
+                            <div className="flex items-center justify-end gap-3">
+                                <button
+                                    onClick={() => setShowDeactivateModal(false)}
+                                    className="px-6 py-2.5 rounded-xl font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDeactivate}
+                                    disabled={deactivating}
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-rose-600 text-white hover:bg-rose-700 shadow-lg shadow-rose-200 dark:shadow-rose-900/30 transition-all"
+                                >
+                                    {deactivating ? (
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <UserX className="w-4 h-4" />
+                                    )}
+                                    Confirm Deactivate
+                                </button>
                             </div>
-                        </div>
-                        <p className="text-gray-600 dark:text-gray-300 mb-8">
-                            Are you sure you want to deactivate <strong>{person.full_name}</strong>?
-                            Their resign date will be set to today and their employment status will be marked as inactive.
-                        </p>
-                        <div className="flex items-center justify-end gap-3">
-                            <button
-                                onClick={() => setShowDeactivateModal(false)}
-                                className="px-6 py-2.5 rounded-xl font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleDeactivate}
-                                disabled={deactivating}
-                                className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-rose-600 text-white hover:bg-rose-700 shadow-lg shadow-rose-200 dark:shadow-rose-900/30 transition-all"
-                            >
-                                {deactivating ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <UserX className="w-4 h-4" />
-                                )}
-                                Confirm Deactivate
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

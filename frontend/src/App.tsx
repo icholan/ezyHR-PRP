@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import DashboardLayout from './components/Layout/DashboardLayout';
 import AdminLayout from './components/Layout/AdminLayout';
@@ -11,6 +12,8 @@ import Payroll from './pages/Payroll';
 import PayrollDetail from './pages/PayrollDetail';
 import Attendance from './pages/Attendance';
 import LeaveManagement from './pages/LeaveManagement';
+import KETDashboard from './pages/KETDashboard';
+import KETEditor from './pages/KETEditor';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantManagement from './pages/platform/TenantManagement';
@@ -29,6 +32,7 @@ import PunchHistory from './pages/attendance/PunchHistory';
 function App() {
     return (
         <Router>
+            <Toaster position="top-right" reverseOrder={false} />
             <Routes>
                 {/* Public Routes */}
                 <Route path="/login" element={<Login />} />
@@ -42,6 +46,8 @@ function App() {
                     <Route path="employees/:id" element={<EmployeeProfile />} />
                     <Route path="payroll" element={<Payroll />} />
                     <Route path="payroll/:id" element={<PayrollDetail />} />
+                    <Route path="ket" element={<KETDashboard />} />
+                    <Route path="ket/:id" element={<KETEditor />} />
                     <Route path="leave" element={<Navigate to="/leave/my" replace />} />
                     <Route path="leave/my" element={<LeaveManagement />} />
                     <Route path="attendance/leave/team" element={<LeaveManagement />} />

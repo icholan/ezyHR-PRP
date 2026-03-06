@@ -87,8 +87,10 @@ Phase 3 (Advanced)
   ├── GPPL/Paternity birth-date logic
   └── Admin UI for managing rules tables
 
+postgresql://postgres:umxQArfdfdXkNTnECJDxQdUzuFQxmOlc@shortline.proxy.rlwy.net:11231/railway
+shortline.proxy.rlwy.net
 
-
+S1234567A
 
 1. The "Apply for Leave" Experience (Employee Facing) 🏖️ You have a incredibly powerful compliance engine in the backend now. We can build a beautiful frontend "Apply for Leave" wizard for employees. This would include:
 

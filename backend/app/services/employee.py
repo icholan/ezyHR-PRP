@@ -2,9 +2,11 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.models.employment import Person, Employment, BankAccount, Department, Group, Grade
+from app.models.payroll import SalaryStructure
 from app.schemas.employee import (
     EmployeeFullCreate, EmployeeSummary, EmployeeFullUpdate,
-    EmployeeDetail, EmployeeDetailPerson, EmployeeDetailEmployment, EmployeeDetailBank
+    EmployeeDetail, EmployeeDetailPerson, EmployeeDetailEmployment, EmployeeDetailBank,
+    SalaryComponentRead
 )
 from app.core.security.encryption import encryptor
 from datetime import date
@@ -26,6 +28,23 @@ class EmployeeService:
         if not acct or len(acct) < 4:
             return "****"
         return "****" + acct[-4:]
+
+    async def is_nric_duplicate(self, tenant_id: uuid.UUID, nric: str) -> bool:
+        """Check if NRIC hash exists for the tenant."""
+        if not nric:
+            return False
+        h = encryptor.get_hash(nric)
+        query = select(Person.id).where(Person.tenant_id == tenant_id, Person.nric_fin_hash == h).limit(1)
+        result = await self.db.execute(query)
+        return result.scalar() is not None
+
+    async def is_employee_code_duplicate(self, entity_id: uuid.UUID, code: str) -> bool:
+        """Check if employee code exists for the entity."""
+        if not code:
+            return False
+        query = select(Employment.id).where(Employment.entity_id == entity_id, Employment.employee_code == code).limit(1)
+        result = await self.db.execute(query)
+        return result.scalar() is not None
 
     async def create_employee(self, tenant_id: uuid.UUID, data: EmployeeFullCreate) -> Employment:
         # 1. Create Person
@@ -74,6 +93,22 @@ class EmployeeService:
             await self.db.flush()
             # Update employment with bank_account_id
             employment.bank_account_id = bank_account.id
+
+        # 3.5. Create Salary Components
+        if data.salary_components:
+            for comp in data.salary_components:
+                sc = SalaryStructure(
+                    employment_id=employment.id,
+                    component=comp.component,
+                    amount=comp.amount,
+                    category=comp.category,
+                    is_taxable=comp.is_taxable,
+                    is_cpf_liable=comp.is_cpf_liable,
+                    effective_date=comp.effective_date,
+                    end_date=comp.end_date
+                )
+                self.db.add(sc)
+            await self.db.flush()
 
         # 4. Grant Initial Leave Entitlements (Phase 2A)
         leave_service = LeaveService(self.db)
@@ -148,12 +183,22 @@ class EmployeeService:
             date_of_birth=person.date_of_birth,
             gender=person.gender,
             contact_number=person.contact_number,
+            mobile_number=person.mobile_number,
+            whatsapp_number=person.whatsapp_number,
             personal_email=person.personal_email,
+            language=person.language,
+            highest_education=person.highest_education,
+            pr_start_date=person.pr_start_date,
+            work_pass_start=person.work_pass_start,
             address=person.address,
+            emergency_contact_name=person.emergency_contact_name,
+            emergency_contact_relationship=person.emergency_contact_relationship,
+            emergency_contact_number=person.emergency_contact_number,
         )
 
         employment_detail = EmployeeDetailEmployment(
             id=emp.id,
+            entity_id=emp.entity_id,
             employee_code=emp.employee_code,
             employment_type=emp.employment_type,
             job_title=emp.job_title,
@@ -199,10 +244,20 @@ class EmployeeService:
                 is_default=bank.is_default,
             )
 
+        # Fetch salary components
+        sc_result = await self.db.execute(
+            select(SalaryStructure).where(SalaryStructure.employment_id == employment_id)
+        )
+        salary_components = [
+            SalaryComponentRead.model_validate(sc)
+            for sc in sc_result.scalars().all()
+        ]
+
         return EmployeeDetail(
             person=person_detail,
             employment=employment_detail,
             bank_account=bank_detail,
+            salary_components=salary_components
         )
 
     async def update_employee(self, employment_id: uuid.UUID, data: EmployeeFullUpdate) -> Optional[EmployeeDetail]:
@@ -235,6 +290,28 @@ class EmployeeService:
                 await self.db.execute(
                     update(Employment).where(Employment.id == employment_id).values(**emp_updates)
                 )
+
+        # Update Salary Components
+        if data.salary_components is not None:
+            # Simple sync: delete all and re-add (for now, can be optimized)
+            # Delete existing
+            from sqlalchemy import delete
+            await self.db.execute(
+                delete(SalaryStructure).where(SalaryStructure.employment_id == employment_id)
+            )
+            # Add new
+            for comp in data.salary_components:
+                sc = SalaryStructure(
+                    employment_id=employment_id,
+                    component=comp.component,
+                    amount=comp.amount,
+                    category=comp.category,
+                    is_taxable=comp.is_taxable,
+                    is_cpf_liable=comp.is_cpf_liable,
+                    effective_date=comp.effective_date,
+                    end_date=comp.end_date
+                )
+                self.db.add(sc)
 
         try:
             await self.db.commit()

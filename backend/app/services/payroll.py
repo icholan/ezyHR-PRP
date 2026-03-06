@@ -9,6 +9,7 @@ from app.models.payroll import PayrollRun, PayrollRecord
 from app.models.employment import Employment, Person
 from app.core.engines.payroll_engine import payroll_engine
 from app.models.statutory import CPFRateConfig
+from app.models.payroll import SalaryStructure
 
 class PayrollService:
     """
@@ -64,9 +65,35 @@ class PayrollService:
             
             ytd_meta = {"ytd_ow": Decimal("0"), "ytd_aw_calculated": Decimal("0")}
 
+            # 2.5 Fetch Salary Structure Components
+            as_of = run.period
+            sc_result = await db.execute(
+                select(SalaryStructure).where(
+                    SalaryStructure.employment_id == emp.id,
+                    SalaryStructure.effective_date <= as_of,
+                    (SalaryStructure.end_date == None) | (SalaryStructure.end_date >= as_of)
+                )
+            )
+            components = sc_result.scalars().all()
+            
+            allowances_total = Decimal("0")
+            deductions_total = Decimal("0")
+            breakdown = {"allowances": [], "deductions": []}
+            
+            for sc in components:
+                amt = Decimal(str(sc.amount))
+                if sc.category == "allowance":
+                    allowances_total += amt
+                    breakdown["allowances"].append({"name": sc.component, "amount": float(amt)})
+                else:
+                    deductions_total += amt
+                    breakdown["deductions"].append({"name": sc.component, "amount": float(amt)})
+
             # 3. Execution
             calc_result = payroll_engine.calculate_employee_payroll(
                 basic_salary=emp.basic_salary,
+                allowances=allowances_total,
+                deductions=deductions_total,
                 person_meta=person_meta,
                 ytd_meta=ytd_meta
             )
@@ -86,6 +113,9 @@ class PayrollService:
                 shg_deduction=calc_result["deductions"]["shg"],
                 sdl_contribution=calc_result["contributions"]["sdl"],
                 net_salary=calc_result["summary"]["net_pay"],
+                other_deductions=float(deductions_total),
+                fixed_allowances=float(allowances_total),
+                breakdown=breakdown,
                 status="draft"
             )
             

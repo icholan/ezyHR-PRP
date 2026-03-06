@@ -11,6 +11,7 @@ class SalaryStructure(Base, IDMixin, TimestampMixin):
     employment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("employments.id", ondelete="CASCADE"), nullable=False)
     component: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), default="allowance") # allowance | deduction
     is_taxable: Mapped[bool] = mapped_column(Boolean, default=True)
     is_cpf_liable: Mapped[bool] = mapped_column(Boolean, default=True)
     effective_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
@@ -64,6 +65,7 @@ class PayrollRecord(Base, IDMixin, TimestampMixin):
     claims_reimbursement: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     other_deductions: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     net_salary: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    breakdown: Mapped[dict] = mapped_column(JSONB, nullable=True) # snapshot of allowances/deductions
     status: Mapped[str] = mapped_column(String(20), default="draft")
 
     __table_args__ = (UniqueConstraint("employment_id", "period", name="uq_payroll_records_period"),)

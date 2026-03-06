@@ -9,6 +9,27 @@ import uuid
 
 router = APIRouter(prefix="/employees", tags=["Employees"], redirect_slashes=False)
 
+@router.get("/check-nric")
+async def check_nric(
+    nric: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    service = EmployeeService(db)
+    is_duplicate = await service.is_nric_duplicate(current_user.tenant_id, nric)
+    return {"is_duplicate": is_duplicate}
+
+@router.get("/check-code")
+async def check_code(
+    code: str,
+    entity_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    service = EmployeeService(db)
+    is_duplicate = await service.is_employee_code_duplicate(entity_id, code)
+    return {"is_duplicate": is_duplicate}
+
 @router.get("", response_model=List[EmployeeSummary])
 async def list_employees(
     entity_id: uuid.UUID,

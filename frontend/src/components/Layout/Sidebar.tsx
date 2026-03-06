@@ -35,6 +35,7 @@ const menuGroups = [
         items: [
             { icon: Users, label: 'Employees', path: '/employees' },
             { icon: Wallet, label: 'Payroll', path: '/payroll' },
+            { icon: FileText, label: 'KET Management', path: '/ket' },
             { icon: Calendar, label: 'My Leave', path: '/leave/my' },
         ]
     },
