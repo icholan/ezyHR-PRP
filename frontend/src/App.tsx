@@ -18,6 +18,9 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import PlatformDashboard from './pages/platform/PlatformDashboard';
 import TenantManagement from './pages/platform/TenantManagement';
 import SubscriptionManagement from './pages/platform/SubscriptionManagement';
+import StatutoryRules from './pages/platform/StatutoryRules';
+import CPFRates from './pages/platform/CPFRates';
+import SHGRates from './pages/platform/SHGRates';
 import UserSettings from './pages/settings/UserSettings';
 import EntityManagement from './pages/settings/EntityManagement';
 import RoleManagement from './pages/settings/RoleManagement';
@@ -71,6 +74,9 @@ function App() {
                     <Route path="stats" element={<PlatformDashboard />} />
                     <Route path="tenants" element={<TenantManagement />} />
                     <Route path="billing" element={<SubscriptionManagement />} />
+                    <Route path="statutory-rules" element={<StatutoryRules />} />
+                    <Route path="cpf-rates" element={<CPFRates />} />
+                    <Route path="shg-rates" element={<SHGRates />} />
                     <Route path="infra" element={<div>Infrastructure Monitoring</div>} />
                 </Route>
 

@@ -53,14 +53,23 @@ class PayrollService:
             age = today.year - person.date_of_birth.year - ((today.month, today.day) < (person.date_of_birth.month, person.date_of_birth.day))
 
             # Fetch rates based on age and citizenship
-            # (Simplified for now, using standard 20/17 rates)
+            from app.core.engines.cpf import cpf_engine
+            rate_config = await cpf_engine.get_rates(
+                db, 
+                emp.citizenship_type, 
+                age, 
+                run.period
+            )
+
             person_meta = {
                 "citizenship_type": emp.citizenship_type,
                 "age": age,
                 "race": person.race,
                 "religion": person.religion,
-                "cpf_ee_rate": Decimal("0.20"),
-                "cpf_er_rate": Decimal("0.17")
+                "cpf_ee_rate": Decimal(str(rate_config.employee_rate)) if rate_config else Decimal("0.20"),
+                "cpf_er_rate": Decimal(str(rate_config.employer_rate)) if rate_config else Decimal("0.17"),
+                "ow_ceiling": Decimal(str(rate_config.ow_ceiling)) if rate_config else Decimal("6800.00"),
+                "aw_ceiling": Decimal(str(rate_config.aw_ceiling_annual)) if rate_config else Decimal("102000.00")
             }
             
             ytd_meta = {"ytd_ow": Decimal("0"), "ytd_aw_calculated": Decimal("0")}

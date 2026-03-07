@@ -101,11 +101,15 @@ async def login_step_2(
         "token_type": "bearer",
         "mfa_required": False,
         "user": {
-            "id": str(admin.id),
+            "id": admin.id,
             "email": admin.email,
+            "full_name": admin.full_name,
+            "role": admin.role,
+            "is_active": admin.is_active,
             "is_platform_admin": True,
             "is_tenant_admin": False,
-            "is_mfa_enabled": True
+            "is_mfa_enabled": True,
+            "created_at": admin.created_at
         }
     }
 

@@ -20,7 +20,6 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 import uuid
 
-from app.api.v1.dependencies import get_db, get_current_user
 from app.schemas.leave import (
     LeaveRequestCreate, LeaveRequestRead, LeaveBalanceRead,
     LeaveTypeRead, LeaveTypeCreate, LeaveTypeUpdate,
@@ -32,6 +31,7 @@ from app.schemas.leave import (
     LeaveCarryPolicyCreate, LeaveCarryPolicyRead,
     AvailableLeaveTypeRead, StandardLeaveSeedRequest,
 )
+from app.api.v1.dependencies import get_db, get_current_user, get_current_any_admin, get_current_platform_admin
 from app.services.leave import LeaveService
 from app.models.leave import (
     LeaveType, LeaveRequest,
@@ -238,7 +238,7 @@ async def delete_leave_type(
 async def list_statutory_rules(
     leave_type_code: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_admin = Depends(get_current_any_admin)
 ):
     """List all MOM statutory progression rules (read-only for most users)."""
     query = select(StatutoryLeaveRule).order_by(
@@ -255,7 +255,7 @@ async def list_statutory_rules(
 async def create_statutory_rule(
     payload: StatutoryLeaveRuleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_admin = Depends(get_current_platform_admin)
 ):
     """
     Insert a new MOM statutory rule (e.g. when MOM amends the Employment Act).
@@ -273,7 +273,7 @@ async def create_statutory_rule(
 async def delete_statutory_rule(
     rule_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_admin = Depends(get_current_platform_admin)
 ):
     """Soft-delete a statutory rule by setting effective_to = today."""
     result = await db.execute(select(StatutoryLeaveRule).where(StatutoryLeaveRule.id == rule_id))
@@ -581,7 +581,7 @@ async def trigger_carry_expiry(
 
 @router.get("/seed-standard/available", response_model=List[AvailableLeaveTypeRead])
 async def get_available_seed_types(
-    current_user: User = Depends(get_current_user)
+    current_user = Depends(get_current_any_admin)
 ):
     """
     Returns the list of standard Singapore leave types available for seeding.

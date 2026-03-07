@@ -57,14 +57,24 @@ class PayrollEngine:
             ee_rate = person_meta.get("cpf_ee_rate", Decimal("0.20"))
             er_rate = person_meta.get("cpf_er_rate", Decimal("0.17"))
             
-            ow_result = cpf_engine.calculate_ow_cpf(ow_amount, ee_rate, er_rate)
-            aw_result = cpf_engine.calculate_aw_cpf(
-                aw_amount, 
-                ytd_meta.get("ytd_ow", Decimal("0")), 
-                ytd_meta.get("ytd_aw_calculated", Decimal("0")), 
-                ee_rate, 
-                er_rate
-            )
+            # Use ceilings from meta if provided, otherwise default to defaults in cpf_engine
+            ow_ceiling = person_meta.get("ow_ceiling")
+            aw_ceiling = person_meta.get("aw_ceiling")
+            
+            ow_params = {"ow_amount": ow_amount, "employee_rate": ee_rate, "employer_rate": er_rate}
+            if ow_ceiling: ow_params["ow_ceiling"] = ow_ceiling
+            
+            aw_params = {
+                "aw_amount": aw_amount, 
+                "ytd_ow": ytd_meta.get("ytd_ow", Decimal("0")), 
+                "ytd_aw_calculated": ytd_meta.get("ytd_aw_calculated", Decimal("0")), 
+                "employee_rate": ee_rate, 
+                "employer_rate": er_rate
+            }
+            if aw_ceiling: aw_params["aw_ceiling_total"] = aw_ceiling
+
+            ow_result = cpf_engine.calculate_ow_cpf(**ow_params)
+            aw_result = cpf_engine.calculate_aw_cpf(**aw_params)
             
             cpf_ee = ow_result["cpf_ee_ow"] + aw_result["cpf_ee_aw"]
             cpf_er = ow_result["cpf_er_ow"] + aw_result["cpf_er_aw"]

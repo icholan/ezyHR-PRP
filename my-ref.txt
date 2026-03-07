@@ -104,3 +104,18 @@ File Upload: A drag-and-drop zone to attach Medical Certificates when applying f
 4. Role & Permission Management 🔐 We have a robust custom roles and permissions architecture in the database. We could build an admin UI to visually toggle permissions (like VIEW_PAYROLL or APPROVE_LEAVE) for different custom roles, allowing you to easily set up Managers vs. HR Admins.
 
 5. Payroll Run Dashboard 💰 If you want to shift focus to finances, we can build the UI that actually triggers a new monthly Payroll Run, dynamically calculating the CPF, SDL, and SHG deductions based on the employee data we've seeded, and displays the gross-to-net salary breakdown in a payslip
+
+
+
+
+Self-Help Groups (SHG):
+Status: Models and GET endpoints exist for CDAC, MBMF, SINDA, and ECF.
+Pending: A CRUD UI to update the wage brackets and deduction amounts when they change.
+Skills Development Levy (SDL):
+Status: Model exists with the standard 0.25% rate and $2/$11.25 caps.
+Pending: A UI to adjust these values if statutory requirements change in the future.
+Public Holidays:
+Status: A public_holidays table exists in the database.
+Pending: A centralized dashboard to seed and manage holidays for each year (e.g., seeding 2024/2025/2026 holidays once for all tenants).
+Foreign Worker Levy (FWL):
+Status: Referenced in migrations but no active management router. This will eventually need a table for different sectors and pass types (Work Permit vs. S Pass).

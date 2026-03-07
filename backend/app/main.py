@@ -30,8 +30,10 @@ app.add_middleware(
 
 # Platform Admin Routes
 from app.api.platform import admin as platform_admin
+from app.api.platform import statutory as platform_statutory
 app.include_router(platform_auth.router, prefix="/platform")
 app.include_router(platform_admin.router, prefix="/platform")
+app.include_router(platform_statutory.router, prefix="/platform")
 
 # Tenant Routes (V1)
 app.include_router(auth.router, prefix="/api/v1")

@@ -130,3 +130,56 @@ def require_permission(required_permission: str):
         return True
         
     return permission_checker
+
+async def get_current_platform_admin(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verifies the JWT and ensures it is of type 'platform_admin'.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if user_id is None or token_type != "platform_admin":
+            raise credentials_exception
+            
+        from app.models.tenant import PlatformAdmin
+        result = await db.execute(select(PlatformAdmin).where(PlatformAdmin.id == uuid.UUID(user_id)))
+        admin = result.scalar_one_or_none()
+        
+        if admin is None or not admin.is_active:
+            raise credentials_exception
+        return admin
+    except (JWTError, ValueError):
+        raise credentials_exception
+
+async def get_current_any_admin(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Allows either a Platform Admin OR a Tenant Admin.
+    Used for global configuration endpoints that both need to see.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        token_type = payload.get("type")
+        
+        if token_type == "platform_admin":
+            return await get_current_platform_admin(token, db)
+        else:
+            return await get_current_user(token, db)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

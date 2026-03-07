@@ -17,6 +17,7 @@ class CPFRateConfig(Base, IDMixin, TimestampMixin):
     aw_ceiling_annual: Mapped[float] = mapped_column(Numeric(10, 2), default=102000.00)
     effective_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     end_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+    is_expired: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class CPFSubmission(Base, IDMixin, TimestampMixin):
     __tablename__ = "cpf_submissions"
@@ -45,6 +46,7 @@ class SHGRateConfig(Base, IDMixin, TimestampMixin):
     deduction_amount: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False)
     effective_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     end_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+    is_expired: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class SDLRateConfig(Base, IDMixin, TimestampMixin):
     __tablename__ = "sdl_rate_config"

@@ -25,6 +25,7 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str
     is_tenant_admin: bool = False
+    is_platform_admin: bool = False
     is_active: bool = True
     person_id: Optional[UUID] = None
 

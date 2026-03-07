@@ -41,11 +41,13 @@ const Login = () => {
             });
 
             if (response.data.mfa_required) {
-                setAdminId(response.data.admin_id);
+                setAdminId(response.data.admin_id || response.data.user_id);
                 setStep(2);
             } else {
                 loginToStore(response.data.user, response.data.access_token);
-                window.location.href = response.data.user.is_platform_admin ? '/admin' : '/dashboard';
+                // Use a more robust check for redirection
+                const isPlatform = response.data.user?.is_platform_admin;
+                window.location.href = isPlatform ? '/admin' : '/dashboard';
             }
         } catch (err: any) {
             console.error('Login error:', err.response?.data);
@@ -68,9 +70,14 @@ const Login = () => {
         setError(null);
         try {
             const verifyPath = isAdmin ? '/platform/auth/verify-mfa' : '/api/v1/auth/mfa/verify';
-            const response = await api.post(verifyPath, { admin_id: adminId, email, code: mfaCode });
+            const payload = isAdmin
+                ? { admin_id: adminId, code: mfaCode }
+                : { user_id: adminId, code: mfaCode };
+
+            const response = await api.post(verifyPath, payload);
             loginToStore(response.data.user, response.data.access_token);
-            window.location.href = response.data.user.is_platform_admin ? '/admin' : '/dashboard';
+            const isPlatform = response.data.user?.is_platform_admin;
+            window.location.href = isPlatform ? '/admin' : '/dashboard';
         } catch (err: any) {
             setError(err.response?.data?.detail || 'Invalid MFA code');
         } finally {

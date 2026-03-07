@@ -5,7 +5,7 @@ import uuid
 
 class EntityBase(BaseModel):
     name: str
-    uen: str
+    uen: Optional[str] = None
     cpf_account_no: Optional[str] = None
     iras_tax_ref: Optional[str] = None
     registered_address: Optional[str] = None
@@ -26,7 +26,11 @@ class EntityBase(BaseModel):
     is_active: bool = True
 
 class EntityCreate(EntityBase):
-    pass
+    uen: str
+    bank_name: str
+    bank_account_no: str
+    bank_account_name: str
+    bank_branch_code: str
 
 class EntityUpdate(BaseModel):
     name: Optional[str] = None

@@ -43,13 +43,14 @@ class CPFCalculationEngine:
         self, 
         ow_amount: Decimal, 
         employee_rate: Decimal, 
-        employer_rate: Decimal
+        employer_rate: Decimal,
+        ow_ceiling: Decimal = Decimal("6800.00")
     ) -> Dict[str, Decimal]:
         """
         Calculates CPF for Ordinary Wages.
-        Applies the $6,800 monthly ceiling.
+        Applies the configured monthly ceiling (e.g., $6,800 for 2024, $7,400 for 2025).
         """
-        eligible_ow = min(ow_amount, self.OW_CEILING)
+        eligible_ow = min(ow_amount, ow_ceiling)
         
         cpf_ee = self.round_cpf(eligible_ow * employee_rate)
         cpf_er = self.round_cpf(eligible_ow * employer_rate)
@@ -66,13 +67,14 @@ class CPFCalculationEngine:
         ytd_ow: Decimal, 
         ytd_aw_calculated: Decimal, 
         employee_rate: Decimal, 
-        employer_rate: Decimal
+        employer_rate: Decimal,
+        aw_ceiling_total: Decimal = Decimal("102000.00")
     ) -> Dict[str, Decimal]:
         """
         Calculates CPF for Additional Wages.
-        Applies the Annual AW Ceiling: 102,000 - Total OW for the year.
+        Applies the Annual AW Ceiling: aw_ceiling_total - Total OW for the year.
         """
-        remaining_aw_ceiling = max(Decimal("0"), self.AW_CEILING_TOTAL - ytd_ow)
+        remaining_aw_ceiling = max(Decimal("0"), aw_ceiling_total - ytd_ow)
         eligible_aw = min(aw_amount, max(Decimal("0"), remaining_aw_ceiling - ytd_aw_calculated))
         
         cpf_ee = self.round_cpf(eligible_aw * employee_rate)

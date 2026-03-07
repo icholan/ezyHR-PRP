@@ -11,7 +11,9 @@ import {
     CreditCard,
     LogOut,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Scale,
+    ShieldCheck
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -20,6 +22,9 @@ import { useNavigate } from 'react-router-dom';
 const adminMenuItems = [
     { icon: BarChart3, label: 'Global Stats', path: '/admin/stats' },
     { icon: Globe, label: 'Tenants', path: '/admin/tenants' },
+    { icon: Scale, label: 'Statutory Rules', path: '/admin/statutory-rules' },
+    { icon: ShieldCheck, label: 'CPF Rates', path: '/admin/cpf-rates' },
+    { icon: Users, label: 'SHG Rates', path: '/admin/shg-rates' },
     { icon: CreditCard, label: 'Subscriptions', path: '/admin/billing' },
     { icon: Database, label: 'Infrastructure', path: '/admin/infra' },
     { icon: ShieldAlert, label: 'Security Logs', path: '/admin/security' },

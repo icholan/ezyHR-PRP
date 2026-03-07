@@ -613,10 +613,11 @@ const EntityManagement = () => {
                                     </div>
                                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Bank Name</label>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Bank Name <span className="text-red-500">*</span></label>
                                             <input
                                                 type="text"
                                                 name="bank_name"
+                                                required
                                                 value={formData.bank_name}
                                                 onChange={handleInputChange}
                                                 className="block w-full rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-primary-500 focus:ring-primary-500/20 p-4 transition-all"
@@ -624,30 +625,33 @@ const EntityManagement = () => {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Account Number</label>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Account Number <span className="text-red-500">*</span></label>
                                             <input
                                                 type="text"
                                                 name="bank_account_no"
+                                                required
                                                 value={formData.bank_account_no}
                                                 onChange={handleInputChange}
                                                 className="block w-full rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-primary-500 focus:ring-primary-500/20 p-4 transition-all"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Account Holder Name</label>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Account Holder Name <span className="text-red-500">*</span></label>
                                             <input
                                                 type="text"
                                                 name="bank_account_name"
+                                                required
                                                 value={formData.bank_account_name}
                                                 onChange={handleInputChange}
                                                 className="block w-full rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-primary-500 focus:ring-primary-500/20 p-4 transition-all"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Bank/Branch Code</label>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Bank/Branch Code <span className="text-red-500">*</span></label>
                                             <input
                                                 type="text"
                                                 name="bank_branch_code"
+                                                required
                                                 value={formData.bank_branch_code}
                                                 onChange={handleInputChange}
                                                 className="block w-full rounded-2xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:border-primary-500 focus:ring-primary-500/20 p-4 transition-all"

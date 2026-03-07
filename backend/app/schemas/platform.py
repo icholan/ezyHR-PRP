@@ -32,3 +32,47 @@ class TenantUpdate(BaseModel):
 class SubscriptionUpdate(BaseModel):
     subscription_plan: Optional[str] = None
     mrr: Optional[float] = None
+
+from datetime import date
+
+# Statutory Config Schemas (CPF, SHG, SDL)
+class CPFRateCreate(BaseModel):
+    citizenship_type: str
+    age_from: int
+    age_to: int
+    employee_rate: float
+    employer_rate: float
+    ow_ceiling: float = 6800.0
+    aw_ceiling_annual: float = 102000.0
+    effective_date: date
+    end_date: Optional[date] = None
+
+class CPFRateRead(CPFRateCreate):
+    id: uuid.UUID
+    is_expired: bool
+    class Config:
+        from_attributes = True
+
+class SHGRateCreate(BaseModel):
+    shg_type: str
+    wage_from: float
+    wage_to: Optional[float] = None
+    deduction_amount: float
+    effective_date: date
+    end_date: Optional[date] = None
+
+class SHGRateRead(SHGRateCreate):
+    id: uuid.UUID
+    is_expired: bool
+    class Config:
+        from_attributes = True
+
+class SDLRateRead(BaseModel):
+    id: uuid.UUID
+    rate: float
+    min_amount: float
+    max_amount: float
+    effective_date: date
+    end_date: Optional[date] = None
+    class Config:
+        from_attributes = True
