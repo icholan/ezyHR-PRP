@@ -224,6 +224,17 @@ class EmployeeService:
             basic_salary=float(emp.basic_salary),
             payment_mode=emp.payment_mode,
             is_ot_eligible=emp.is_ot_eligible,
+            ot_rate=float(emp.ot_rate or 1.5),
+            salary_period=emp.salary_period or "monthly",
+            ot_payment_period=emp.ot_payment_period or "monthly",
+            job_responsibilities=emp.job_responsibilities,
+            probation_period=emp.probation_period,
+            notice_period=emp.notice_period,
+            work_location=emp.work_location,
+            medical_benefits=emp.medical_benefits,
+            dental_benefits=emp.dental_benefits,
+            insurance_benefits=emp.insurance_benefits,
+            other_benefits=emp.other_benefits,
             is_active=emp.is_active,
         )
 

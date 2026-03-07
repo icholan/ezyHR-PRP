@@ -30,6 +30,7 @@ from app.schemas.leave import (
     StatutoryLeaveRuleCreate, StatutoryLeaveRuleRead,
     LeaveTypePolicyCreate, LeaveTypePolicyRead,
     LeaveCarryPolicyCreate, LeaveCarryPolicyRead,
+    AvailableLeaveTypeRead, StandardLeaveSeedRequest,
 )
 from app.services.leave import LeaveService
 from app.models.leave import (
@@ -576,3 +577,42 @@ async def trigger_carry_expiry(
         "task_id": task.id, 
         "message": f"Carry expiry task for {as_of_date or 'today'} queued successfully."
     }
+
+
+@router.get("/seed-standard/available", response_model=List[AvailableLeaveTypeRead])
+async def get_available_seed_types(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns the list of standard Singapore leave types available for seeding.
+    """
+    return LeaveService.get_standard_leave_configs()
+
+
+@router.post("/seed-standard/{entity_id}", response_model=dict)
+async def seed_standard_leave_types(
+    entity_id: uuid.UUID,
+    payload: StandardLeaveSeedRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Manually trigger seeding of standard MOM leave types for an entity.
+    Requires tenant admin privileges.
+    Allows specifying a list of codes to seed.
+    """
+    if not current_user.is_tenant_admin:
+        raise HTTPException(status_code=403, detail="Only Tenant Administrators can seed leave types.")
+        
+    service = LeaveService(db)
+    try:
+        results = await service.seed_standard_leave_types(entity_id, codes=payload.codes)
+        await db.commit()
+        return {
+            "status": "success",
+            "message": f"Successfully seeded {results['created']} leave types. {results['skipped']} were already present.",
+            "data": results
+        }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1161,3 +1161,104 @@ class LeaveService:
         await self.db.flush()
 
         return new_ent
+
+    @staticmethod
+    def get_standard_leave_configs():
+        """Returns the master list of standard Singapore leave type configurations."""
+        return [
+            # Statutory
+            {"code": "AL", "name": "Annual Leave", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "ML", "name": "Medical (Outpatient)", "is_paid": True, "is_statutory": True, "pool_sub_cap": 14.0, "category": "Statutory"},
+            {"code": "HL", "name": "Hospitalisation", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "CL", "name": "Childcare Leave", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "ECL", "name": "Extended Childcare", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "MAT", "name": "Maternity (GPML)", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "PAT", "name": "Paternity (GPPL)", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "SPL", "name": "Shared Parental", "is_paid": True, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            {"code": "UPL", "name": "Unpaid Infant Care", "is_paid": False, "is_statutory": True, "pool_sub_cap": None, "category": "Statutory"},
+            
+            # Company Benefits (Non-Statutory)
+            {"code": "MAR", "name": "Marriage Leave", "is_paid": True, "is_statutory": False, "pool_sub_cap": None, "category": "Company Benefits"},
+            {"code": "COM", "name": "Compassionate Leave", "is_paid": True, "is_statutory": False, "pool_sub_cap": None, "category": "Company Benefits"},
+            {"code": "BDAY", "name": "Birthday Leave", "is_paid": True, "is_statutory": False, "pool_sub_cap": None, "category": "Company Benefits"},
+            {"code": "OIL", "name": "Off-in-Lieu", "is_paid": True, "is_statutory": False, "pool_sub_cap": None, "category": "Company Benefits"},
+            {"code": "VOL", "name": "Volunteer Leave", "is_paid": True, "is_statutory": False, "pool_sub_cap": None, "category": "Company Benefits"},
+        ]
+
+    async def seed_standard_leave_types(self, entity_id: uuid.UUID, codes: Optional[List[str]] = None) -> dict:
+        """
+        Seeds standard MOM statutory leave types and common company benefits for an entity.
+        Includes shared SICK_HOSP_POOL (60 days).
+        If codes is provided, only seeds those types.
+        """
+        all_configs = self.get_standard_leave_configs()
+        
+        if codes:
+            leave_configs = [c for c in all_configs if c["code"] in codes]
+        else:
+            leave_configs = all_configs
+
+        if not leave_configs:
+            return {"created": 0, "skipped": 0}
+
+        # 1. Setup Shared Sick & Hospitalisation Pool (Required for MOM Compliance)
+        # Only if ML or HL are being seeded
+        sick_codes = ["ML", "HL"]
+        has_sick = any(c["code"] in sick_codes for c in leave_configs)
+        sick_pool_id = None
+
+        if has_sick:
+            pool_code = "SICK_HOSP_POOL"
+            stmt = select(LeavePool).where(and_(LeavePool.entity_id == entity_id, LeavePool.code == pool_code))
+            sick_pool = (await self.db.execute(stmt)).scalar_one_or_none()
+            
+            if not sick_pool:
+                sick_pool = LeavePool(
+                    entity_id=entity_id,
+                    code=pool_code,
+                    name="Sick & Hospitalisation Pool",
+                    cap_days=60.0,
+                    scope="employment",
+                    effective_from=date(2024, 1, 1)
+                )
+                self.db.add(sick_pool)
+                await self.db.flush()
+            sick_pool_id = sick_pool.id
+
+        # 2. Define Standard Leave Types
+        created = 0
+        skipped = 0
+        
+        for config in leave_configs:
+            code = config["code"]
+            name = config["name"]
+            is_paid = config["is_paid"]
+            is_statutory = config["is_statutory"]
+            p_sub_cap = config["pool_sub_cap"]
+
+            stmt = select(LeaveType).where(and_(LeaveType.entity_id == entity_id, LeaveType.code == code))
+            lt = (await self.db.execute(stmt)).scalar_one_or_none()
+            
+            p_id = sick_pool_id if code in sick_codes else None
+
+            if not lt:
+                lt = LeaveType(
+                    entity_id=entity_id,
+                    code=code,
+                    name=name,
+                    is_paid=is_paid,
+                    is_statutory=is_statutory,
+                    pool_id=p_id,
+                    pool_sub_cap=p_sub_cap,
+                    is_active=True
+                )
+                self.db.add(lt)
+                created += 1
+            else:
+                # Update existing if needed (e.g. attaching to pool)
+                lt.pool_id = p_id
+                lt.pool_sub_cap = p_sub_cap
+                skipped += 1
+        
+        await self.db.flush()
+        return {"created": created, "skipped": skipped}

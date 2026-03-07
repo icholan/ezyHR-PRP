@@ -249,3 +249,17 @@ class LeaveCarryPolicyRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─────────────────────────────────────────────
+# Selective Leave Seeding
+# ─────────────────────────────────────────────
+
+class AvailableLeaveTypeRead(BaseModel):
+    code: str
+    name: str
+    is_statutory: bool
+    category: str
+
+class StandardLeaveSeedRequest(BaseModel):
+    codes: Optional[List[str]] = None

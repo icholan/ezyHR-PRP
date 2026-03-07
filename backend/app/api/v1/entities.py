@@ -10,6 +10,8 @@ from app.models.auth import User
 from app.api.v1.dependencies import get_current_user
 from app.schemas.entities import EntityRead, EntityCreate, EntityUpdate
 from datetime import datetime
+from app.services.leave import LeaveService
+
 router = APIRouter(prefix="/entities", tags=["Entities"])
 
 @router.get("", response_model=List[EntityRead])
@@ -50,8 +52,33 @@ async def create_entity(
         **entity_in.model_dump()
     )
     db.add(db_entity)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        # Handle unique constraint violations gracefully
+        error_msg = str(e).lower()
+        if "unique" in error_msg:
+            if "uen" in error_msg:
+                raise HTTPException(status_code=400, detail="Company UEN already exists.")
+            if "cpf_account_no" in error_msg:
+                raise HTTPException(status_code=400, detail="CPF Account No already exists.")
+            if "iras_tax_ref" in error_msg:
+                raise HTTPException(status_code=400, detail="IRAS Tax Reference already exists.")
+            if "gst_no" in error_msg:
+                raise HTTPException(status_code=400, detail="GST Registration No already exists.")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
     await db.refresh(db_entity)
+    
+    # Auto-seed standard leave types for the new entity
+    try:
+        leave_service = LeaveService(db)
+        await leave_service.seed_standard_leave_types(entity_id=db_entity.id)
+        await db.commit() 
+    except Exception as e:
+        print(f"Failed to auto-seed leave types for entity {db_entity.id}: {e}")
+        
     return db_entity
 
 @router.patch("/{entity_id}", response_model=EntityRead)
@@ -79,7 +106,22 @@ async def update_entity(
     for field, value in update_data.items():
         setattr(db_entity, field, value)
         
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        error_msg = str(e).lower()
+        if "unique" in error_msg:
+            if "uen" in error_msg:
+                raise HTTPException(status_code=400, detail="Company UEN already exists.")
+            if "cpf_account_no" in error_msg:
+                raise HTTPException(status_code=400, detail="CPF Account No already exists.")
+            if "iras_tax_ref" in error_msg:
+                raise HTTPException(status_code=400, detail="IRAS Tax Reference already exists.")
+            if "gst_no" in error_msg:
+                raise HTTPException(status_code=400, detail="GST Registration No already exists.")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
     await db.refresh(db_entity)
     return db_entity
 
