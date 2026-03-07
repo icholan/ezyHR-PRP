@@ -119,3 +119,22 @@ Status: A public_holidays table exists in the database.
 Pending: A centralized dashboard to seed and manage holidays for each year (e.g., seeding 2024/2025/2026 holidays once for all tenants).
 Foreign Worker Levy (FWL):
 Status: Referenced in migrations but no active management router. This will eventually need a table for different sectors and pass types (Work Permit vs. S Pass).
+
+
+
+
+My Technical Proposal for Payroll Generation:
+YTD Accuracy (The "AW Ceiling" Fix): Singapore CPF has an annual Additional Wage (AW) ceiling ($102k - YTD OW). Currently, our engine assumes YTD is 0. I need to implement a YTD Tracking System to ensure high-earners are calculated correctly across multiple months.
+
+Leave & OT Integration: Payroll shouldn't be manual. I'll update the PayrollService to automatically fetch:
+
+Unpaid Leave: From the Leave module to deduct from basic pay.
+OT Hours: From the Attendance/Roster module to calculate 1.5x/2.0x pay.
+The "Output" Layer: Generation isn't just about math; it's about compliance files:
+
+CPF91 Generator: Automatic generation of the file for CPF Board submission.
+GIRO/FAST Generator: Bank file for bulk salary disbursement.
+Interactive Payslips: A professional UI for employees to see their OA/SA/MA breakdown.
+AI Audit Panel: Enhancing the "Process" flow so that HR Admins see an "Audit" report (Salary anomalies, compliance risks) before they "Approve & Lock" the payroll.
+
+Does this "Generation & Compliance" roadmap look correct to you? If so, I'll start with the YTD tracking infrastructure.

@@ -56,3 +56,16 @@ class SDLRateConfig(Base, IDMixin, TimestampMixin):
     max_amount: Mapped[float] = mapped_column(Numeric(8, 2), default=11.25)
     effective_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
     end_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+    is_expired: Mapped[bool] = mapped_column(Boolean, default=False)
+
+class CPFAllocationConfig(Base, IDMixin, TimestampMixin):
+    __tablename__ = "cpf_allocation_config"
+
+    age_from: Mapped[int] = mapped_column(Integer, nullable=False)
+    age_to: Mapped[int] = mapped_column(Integer, nullable=False)
+    oa_ratio: Mapped[float] = mapped_column(Numeric(6, 5), nullable=False)
+    sa_ratio: Mapped[float] = mapped_column(Numeric(6, 5), nullable=False) # Maps to RA for 55+
+    ma_ratio: Mapped[float] = mapped_column(Numeric(6, 5), nullable=False)
+    effective_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+    is_expired: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -37,7 +37,7 @@ class CPF91Generator:
         return "".join(record)
 
     def generate_detail(self, nric: str, name: str, ow: float, aw: float, 
-                        ee_cpf: float, er_cpf: float) -> str:
+                        ee_cpf: float, er_cpf: float, sdl: float = 0, shg: float = 0, shg_type: str = "NONE") -> str:
         """
         Record Type 'D' (Employee Contribution Detail)
         """
@@ -45,17 +45,28 @@ class CPF91Generator:
         record[0] = 'D'
         # NRIC: Columns 29-37 (Index 28-36)
         record[28:37] = list(nric.upper().ljust(9)[:9])
-        # OW: Columns 50-59 (Index 49-58) - 10 bytes (8.2)
-        record[49:59] = list(self.format_amount(ow, 10))
-        # AW: Columns 60-69 (Index 59-68) - 10 bytes
-        record[59:69] = list(self.format_amount(aw, 10))
+        
         # Total CPF (EE+ER): Columns 38-47 (Index 37-46) - 10 bytes
         total_cpf = ee_cpf + er_cpf
         record[37:47] = list(self.format_amount(total_cpf, 10))
-        # EE CPF: Columns 141-150 (Index 140-149) - Usually at the end or specific cols
-        # CPF Specs vary, let's use common EZPay columns
-        # Name: Columns 71-136 (Index 70-135)
-        record[70:136] = list(name.upper().ljust(66)[:66])
+        
+        # OW: Columns 50-59 (Index 49-58)
+        record[49:59] = list(self.format_amount(ow, 10))
+        # AW: Columns 60-69 (Index 59-68)
+        record[59:69] = list(self.format_amount(aw, 10))
+        
+        # Name: Columns 71-120 (Index 70-119)
+        record[70:120] = list(name.upper().ljust(50)[:50])
+        
+        # SHG Mapping (Repositioned to end of name)
+        # 121-130: MBMF/SINDA/CDAC/ECF
+        if shg_type == "MBMF": record[120:130] = list(self.format_amount(shg, 10))
+        elif shg_type == "SINDA": record[120:130] = list(self.format_amount(shg, 10))
+        elif shg_type == "CDAC": record[120:130] = list(self.format_amount(shg, 10))
+        elif shg_type == "ECF": record[120:130] = list(self.format_amount(shg, 10))
+        
+        # SDL: Columns 131-140 (Index 130-139)
+        record[130:140] = list(self.format_amount(sdl, 10))
         
         return "".join(record)
 
@@ -82,10 +93,13 @@ class CPF91Generator:
         
         total_contrib = 0
         for emp in employees:
-            total_contrib += (emp['ee_cpf'] + emp['er_cpf'])
+            total_contrib += (emp['ee_cpf'] + emp['er_cpf'] + emp.get('shg', 0) + emp.get('sdl', 0))
             lines.append(self.generate_detail(
                 emp['nric'], emp['name'], emp['ow'], emp['aw'], 
-                emp['ee_cpf'], emp['er_cpf']
+                emp['ee_cpf'], emp['er_cpf'],
+                sdl=emp.get('sdl', 0),
+                shg=emp.get('shg', 0),
+                shg_type=emp.get('shg_type', 'NONE')
             ))
             
         # Trailer

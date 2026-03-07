@@ -5,6 +5,7 @@ from app.models.payroll import PayrollRun, PayrollRecord
 from app.models import Employment, Person
 from app.utils.generators.cpf91 import CPF91Generator
 from app.utils.generators.ir8a import IR8AGenerator
+from app.utils.generators.giro import GIROGenerator
 import os
 from datetime import date
 
@@ -13,6 +14,7 @@ class ReportingService:
         self.db = db
         self.cpf_gen = CPF91Generator()
         self.ir8a_gen = IR8AGenerator()
+        self.giro_gen = GIROGenerator()
 
     async def generate_cpf91_report(self, entity_id: str, year: int, month: int):
         # 1. Fetch Entity for UEN
@@ -44,7 +46,7 @@ class ReportingService:
 
         # 3. Company Info
         company_info = {
-            "uen": entity.uen or "123456789G",
+            "uen": entity.cpf_account_no or entity.uen or "123456789G",
             "payment_month": f"{year}{month:02d}"
         }
 
@@ -57,10 +59,13 @@ class ReportingService:
                 "ow": float(record.ordinary_wage),
                 "aw": float(record.additional_wage),
                 "ee_cpf": float(record.cpf_employee),
-                "er_cpf": float(record.cpf_employer)
+                "er_cpf": float(record.cpf_employer),
+                "sdl": float(record.sdl_contribution or 0),
+                "shg": float(record.shg_deduction or 0),
+                "shg_type": record.breakdown.get("shg_type", "NONE") if record.breakdown else "NONE"
             })
 
-        return self.cpf_gen.generate_file(company_info, employees)
+        return self.cpf_gen.generate_file(company_info, employees).encode("utf-8")
 
     async def generate_ir8a_report(self, entity_id: str, year: int):
         # 1. Fetch Entity
@@ -174,3 +179,46 @@ class ReportingService:
             ])
 
         return output.getvalue().encode("utf-8")
+
+    async def generate_giro_report(self, entity_id: str, year: int, month: int):
+        from app.models.employment import BankAccount
+        
+        # 1. Fetch all payroll records for this entity and month
+        target_period = date(year, month, 1)
+        
+        query = (
+            select(PayrollRecord, Employment, Person, BankAccount)
+            .join(Employment, PayrollRecord.employment_id == Employment.id)
+            .join(Person, Employment.person_id == Person.id)
+            .join(PayrollRun, PayrollRecord.payroll_run_id == PayrollRun.id)
+            .outerjoin(BankAccount, Employment.bank_account_id == BankAccount.id)
+            .where(
+                PayrollRun.entity_id == entity_id,
+                PayrollRun.period == target_period,
+                PayrollRun.status == "approved"
+            )
+        )
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        if not rows:
+            return None
+
+        # 2. Format records for GIRO
+        giro_records = []
+        for record, employment, person, bank in rows:
+            # Bank parsing: Usually "DBS 001-123456-7"
+            # For this MVP, we'll try to split or use as is
+            bank_name = bank.bank_name if bank else "CASH"
+            account_no = bank.account_number if bank else "" 
+            
+            giro_records.append({
+                "name": person.full_name,
+                "bank_code": "", # Extract from bank_name if possible or store separately
+                "branch_code": "",
+                "account_no": account_no,
+                "amount": float(record.net_salary),
+                "description": f"SALARY {target_period.strftime('%b %Y')}"
+            })
+
+        return self.giro_gen.generate_csv(giro_records).encode("utf-8")

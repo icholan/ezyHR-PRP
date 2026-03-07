@@ -139,6 +139,7 @@ class AttendanceService:
         shift = Shift(**shift_in.model_dump())
         self.db.add(shift)
         await self.db.flush()
+        await self.db.refresh(shift, ["breaks"])
         return shift
 
     async def get_shifts(self, entity_id: uuid.UUID) -> List[Shift]:
@@ -171,6 +172,7 @@ class AttendanceService:
             setattr(shift, field, value)
         
         await self.db.flush()
+        await self.db.refresh(shift, ["breaks"])
         return shift
 
     async def delete_shift(self, shift_id: uuid.UUID) -> None:
@@ -422,7 +424,7 @@ class AttendanceService:
         Calculates the best shift for a punch when no roster is assigned.
         Uses time distance between punch and shift start.
         """
-        stmt = select(Shift).where(and_(Shift.entity_id == entity_id, Shift.is_deleted == False))
+        stmt = select(Shift).where(and_(Shift.entity_id == entity_id, Shift.is_deleted == False)).options(selectinload(Shift.breaks))
         result = await self.db.execute(stmt)
         shifts = result.scalars().all()
         
@@ -674,6 +676,76 @@ class AttendanceService:
             else:
                 daily.status = "approved" if record.is_approved else "pending"
             
+        await self.db.flush()
+
+    async def compute_monthly_attendance(self, entity_id: uuid.UUID, period: date):
+        """
+        Automates processing for the entire month:
+        1. Process each day (daily computation).
+        2. Roll up totals into MonthlyOTSummary.
+        """
+        import calendar
+        from app.models.attendance import MonthlyOTSummary
+        from decimal import Decimal
+
+        _, last_day = calendar.monthrange(period.year, period.month)
+        start_date = period.replace(day=1)
+        end_date = period.replace(day=last_day)
+
+        # 1. Process Daily Attendance for each day in range
+        current_date = start_date
+        while current_date <= end_date:
+            await self.compute_daily_attendance(entity_id, current_date)
+            current_date += timedelta(days=1)
+        
+        await self.db.flush()
+
+        # 2. Monthly Rollup into MonthlyOTSummary
+        stmt = select(DailyAttendance).where(
+            and_(
+                DailyAttendance.entity_id == entity_id,
+                DailyAttendance.work_date >= start_date,
+                DailyAttendance.work_date <= end_date
+            )
+        )
+        daily_records = (await self.db.execute(stmt)).scalars().all()
+
+        # Aggregate per employee
+        aggregates = {} # employment_id -> {normal, ot15, ot20}
+        for rec in daily_records:
+            emp_id = rec.employment_id
+            if emp_id not in aggregates:
+                aggregates[emp_id] = {
+                    "normal": Decimal("0"),
+                    "ot15": Decimal("0"),
+                    "ot20": Decimal("0")
+                }
+            aggregates[emp_id]["normal"] += Decimal(str(rec.normal_hours))
+            aggregates[emp_id]["ot15"] += Decimal(str(rec.ot_hours_1_5x))
+            aggregates[emp_id]["ot20"] += Decimal(str(rec.ot_hours_2x))
+
+        for emp_id, totals in aggregates.items():
+            sum_stmt = select(MonthlyOTSummary).where(
+                and_(
+                    MonthlyOTSummary.employment_id == emp_id,
+                    MonthlyOTSummary.period == start_date
+                )
+            )
+            summary = (await self.db.execute(sum_stmt)).scalar_one_or_none()
+
+            if not summary:
+                summary = MonthlyOTSummary(
+                    employment_id=emp_id,
+                    entity_id=entity_id,
+                    period=start_date
+                )
+                self.db.add(summary)
+
+            summary.total_normal_hours = float(totals["normal"])
+            summary.ot_hours_1_5x = float(totals["ot15"])
+            summary.ot_hours_2x = float(totals["ot20"])
+            summary.total_ot_hours = float(totals["ot15"] + totals["ot20"])
+        
         await self.db.flush()
 
     # ─── Public Holiday Methods ───

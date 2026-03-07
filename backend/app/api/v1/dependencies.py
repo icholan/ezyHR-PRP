@@ -70,32 +70,32 @@ async def get_entity_access(
     entity_id: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
-) -> uuid.UUID:
+) -> str:
     """
     Verifies if a user has access to a specific entity.
-    Returns the role_id.
+    Returns the role name (e.g., "hr_admin", "manager").
     """
-    # Tenant Admins have global access
+    # Tenant Admins have global access and act as hr_admin
     if user.is_tenant_admin:
-        # For legacy compatibility, return a "fake" UUID or None, but ideally callers
-        # use require_permission instead of checking roles directly.
-        return None
+        return "hr_admin"
 
-    result = await db.execute(
-        select(UserEntityAccess).where(
-            UserEntityAccess.user_id == user.id,
-            UserEntityAccess.entity_id == entity_id
-        )
+    query = select(Role.name).join(
+        UserEntityAccess, UserEntityAccess.role_id == Role.id
+    ).where(
+        UserEntityAccess.user_id == user.id,
+        UserEntityAccess.entity_id == entity_id
     )
-    access = result.scalar_one_or_none()
     
-    if not access:
+    result = await db.execute(query)
+    role_name = result.scalar_one_or_none()
+    
+    if not role_name:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this entity"
         )
         
-    return access.role_id
+    return role_name
 
 def require_permission(required_permission: str):
     async def permission_checker(

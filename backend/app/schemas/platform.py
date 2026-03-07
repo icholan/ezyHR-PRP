@@ -67,12 +67,31 @@ class SHGRateRead(SHGRateCreate):
     class Config:
         from_attributes = True
 
-class SDLRateRead(BaseModel):
-    id: uuid.UUID
-    rate: float
-    min_amount: float
-    max_amount: float
+class SDLRateCreate(BaseModel):
+    rate: float = 0.00250
+    min_amount: float = 2.00
+    max_amount: float = 11.25
     effective_date: date
     end_date: Optional[date] = None
+
+class SDLRateRead(SDLRateCreate):
+    id: uuid.UUID
+    is_expired: bool
+    class Config:
+        from_attributes = True
+
+# CPF Allocation Config Schemas
+class CPFAllocationCreate(BaseModel):
+    age_from: int
+    age_to: int
+    oa_ratio: float
+    sa_ratio: float
+    ma_ratio: float
+    effective_date: date
+    end_date: Optional[date] = None
+
+class CPFAllocationRead(CPFAllocationCreate):
+    id: uuid.UUID
+    is_expired: bool
     class Config:
         from_attributes = True

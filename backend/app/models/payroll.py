@@ -58,6 +58,9 @@ class PayrollRecord(Base, IDMixin, TimestampMixin):
     additional_wage: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     cpf_employee: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     cpf_employer: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    cpf_oa: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+    cpf_sa: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0) # SA or RA
+    cpf_ma: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     shg_deduction: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     sdl_contribution: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
     fwl_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
@@ -85,3 +88,22 @@ class AuditFlag(Base, IDMixin, TimestampMixin):
     resolved_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     resolved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     resolution_notes: Mapped[str] = mapped_column(Text, nullable=True)
+
+class PersonCPFSummary(Base, IDMixin, TimestampMixin):
+    """
+    Tracks Year-To-Date (YTD) CPF-liable wages for a person across a calendar year.
+    Crucial for calculating the AW Ceiling: max(0, 102000 - YTD_OW).
+    """
+    __tablename__ = "person_cpf_summaries"
+
+    person_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("persons.id", ondelete="CASCADE"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    ytd_ow: Mapped[float] = mapped_column(Numeric(14, 2), default=0.0, nullable=False)
+    ytd_aw: Mapped[float] = mapped_column(Numeric(14, 2), default=0.0, nullable=False)
+    ytd_cpf_ee: Mapped[float] = mapped_column(Numeric(14, 2), default=0.0, nullable=False)
+    ytd_cpf_er: Mapped[float] = mapped_column(Numeric(14, 2), default=0.0, nullable=False)
+    
+    last_updated_period: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+
+    __table_args__ = (UniqueConstraint("person_id", "year", name="uq_person_cpf_year"),)

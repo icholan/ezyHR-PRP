@@ -9,7 +9,9 @@ import Employees from './pages/Employees';
 import AddEmployee from './pages/AddEmployee';
 import EmployeeProfile from './pages/EmployeeProfile';
 import Payroll from './pages/Payroll';
+import PayrollNew from './pages/PayrollNew';
 import PayrollDetail from './pages/PayrollDetail';
+import Payslip from './pages/Payslip';
 import Attendance from './pages/Attendance';
 import LeaveManagement from './pages/LeaveManagement';
 import KETDashboard from './pages/KETDashboard';
@@ -21,6 +23,8 @@ import SubscriptionManagement from './pages/platform/SubscriptionManagement';
 import StatutoryRules from './pages/platform/StatutoryRules';
 import CPFRates from './pages/platform/CPFRates';
 import SHGRates from './pages/platform/SHGRates';
+import SDLRates from './pages/platform/SDLRates';
+import CPFAllocations from './pages/platform/CPFAllocations';
 import UserSettings from './pages/settings/UserSettings';
 import EntityManagement from './pages/settings/EntityManagement';
 import RoleManagement from './pages/settings/RoleManagement';
@@ -48,7 +52,9 @@ function App() {
                     <Route path="employees/add" element={<AddEmployee />} />
                     <Route path="employees/:id" element={<EmployeeProfile />} />
                     <Route path="payroll" element={<Payroll />} />
+                    <Route path="payroll/new" element={<PayrollNew />} />
                     <Route path="payroll/:id" element={<PayrollDetail />} />
+                    <Route path="payroll/:id/payslip/:record_id" element={<Payslip />} />
                     <Route path="ket" element={<KETDashboard />} />
                     <Route path="ket/:id" element={<KETEditor />} />
                     <Route path="leave" element={<Navigate to="/leave/my" replace />} />
@@ -77,6 +83,8 @@ function App() {
                     <Route path="statutory-rules" element={<StatutoryRules />} />
                     <Route path="cpf-rates" element={<CPFRates />} />
                     <Route path="shg-rates" element={<SHGRates />} />
+                    <Route path="sdl-rates" element={<SDLRates />} />
+                    <Route path="cpf-allocations" element={<CPFAllocations />} />
                     <Route path="infra" element={<div>Infrastructure Monitoring</div>} />
                 </Route>
 

@@ -12,10 +12,13 @@ import {
     AlertTriangle,
     ChevronDown,
     MoreHorizontal,
-    FileCheck
+    FileCheck,
+    Loader2,
+    Trash2
 } from 'lucide-react';
 import api from '../services/api';
 import { clsx } from 'clsx';
+import { toast } from 'react-hot-toast';
 
 const PayrollDetail = () => {
     const { id } = useParams();
@@ -23,19 +26,87 @@ const PayrollDetail = () => {
     const [run, setRun] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    const fetchDetail = async () => {
+        setLoading(true);
+        try {
+            const response = await api.get(`/api/v1/payroll/runs/${id}`);
+            setRun(response.data);
+        } catch (error) {
+            console.error("Failed to fetch payroll details", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchDetail = async () => {
-            try {
-                const response = await api.get(`/api/v1/payroll/runs/${id}`);
-                setRun(response.data);
-            } catch (error) {
-                console.error("Failed to fetch payroll details", error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchDetail();
     }, [id]);
+
+    const handleProcess = async () => {
+        const t = toast.loading("Processing payroll calculations...");
+        try {
+            await api.post(`/api/v1/payroll/runs/${id}/process`);
+            toast.success("Payroll records processed successfully", { id: t });
+            fetchDetail();
+        } catch (error: any) {
+            toast.error(error.response?.data?.detail || "Processing failed", { id: t });
+        }
+    };
+
+    const handleAudit = async () => {
+        const t = toast.loading("Running AI Compliance Audit...");
+        try {
+            const res = await api.post(`/api/v1/payroll/runs/${id}/audit`);
+            toast.success(`Audit complete: ${res.data.flags_found} flags found`, { id: t });
+            fetchDetail();
+        } catch (error: any) {
+            toast.error(error.response?.data?.detail || "Audit failed", { id: t });
+        }
+    };
+
+    const handleApprove = async () => {
+        if (!window.confirm("Are you sure you want to approve this payroll run? This will lock the records and update YTD data.")) return;
+        const t = toast.loading("Finalizing approval...");
+        try {
+            await api.post(`/api/v1/payroll/runs/${id}/approve`);
+            toast.success("Payroll run approved successfully", { id: t });
+            fetchDetail();
+        } catch (error: any) {
+            toast.error(error.response?.data?.detail || "Approval failed", { id: t });
+        }
+    };
+
+    const handleExport = async (type: 'cpf91' | 'giro') => {
+        try {
+            // Use browser download
+            const response = await api.get(`/api/v1/payroll/runs/${id}/export/${type}`, {
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            const filename = type === 'cpf91' ? `CPF91_${id?.slice(0, 6)}.txt` : `GIRO_${id?.slice(0, 6)}.csv`;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error: any) {
+            toast.error("Export failed. Ensure the run is approved.");
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!window.confirm("CRITICAL: Are you sure you want to delete this entire payroll batch? This will permanently remove all records and REVERSE all YTD contributions for this period. This action cannot be undone.")) return;
+
+        const t = toast.loading("Deleting payroll batch...");
+        try {
+            await api.delete(`/api/v1/payroll/runs/${id}`);
+            toast.success("Payroll batch deleted successfully", { id: t });
+            navigate('/payroll');
+        } catch (error: any) {
+            toast.error(error.response?.data?.detail || "Delete failed", { id: t });
+        }
+    };
 
     if (loading) return (
         <div className="flex items-center justify-center min-h-[400px]">
@@ -77,16 +148,49 @@ const PayrollDetail = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl text-gray-600 dark:text-gray-300 font-bold text-sm hover:bg-gray-50 dark:hover:bg-gray-800 dark:bg-gray-800 transition-all">
-                        <Download className="w-4 h-4" />
-                        Export
-                    </button>
-                    {run.status !== 'approved' && (
-                        <button className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200">
+                    {run.status === 'approved' && (
+                        <div className="flex items-center bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
+                            <button
+                                onClick={() => handleExport('cpf91')}
+                                className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 border-r border-gray-100 dark:border-gray-800 flex items-center gap-2"
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                CPF91
+                            </button>
+                            <button
+                                onClick={() => handleExport('giro')}
+                                className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
+                            >
+                                <Download className="w-3.5 h-3.5" />
+                                GIRO
+                            </button>
+                        </div>
+                    )}
+                    {run.status === 'processed' && (
+                        <button
+                            onClick={handleApprove}
+                            className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200"
+                        >
                             <FileCheck className="w-4 h-4" />
-                            Approve Run
+                            Approve
                         </button>
                     )}
+                    {(run.status === 'draft' || !run.records || run.records.length === 0) && (
+                        <button
+                            onClick={handleProcess}
+                            className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200"
+                        >
+                            <Loader2 className="w-4 h-4" />
+                            Process
+                        </button>
+                    )}
+                    <button
+                        onClick={handleDelete}
+                        className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl font-bold text-sm transition-all border border-rose-100"
+                        title="Hard Delete Batch"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
 
@@ -140,8 +244,11 @@ const PayrollDetail = () => {
                                             <td className="px-6 py-4 font-medium text-rose-600 dark:text-rose-400">-${Number(record.cpf_employee).toFixed(2)}</td>
                                             <td className="px-6 py-4 font-bold text-dark-950 dark:text-gray-50">${Number(record.net_salary).toFixed(2)}</td>
                                             <td className="px-6 py-4 text-right">
-                                                <button className="p-2 hover:bg-gray-100 rounded-lg transition-all">
-                                                    <MoreHorizontal className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                                                <button
+                                                    onClick={() => navigate(`/payroll/${id}/payslip/${record.id}`)}
+                                                    className="px-3 py-1.5 text-[10px] font-bold text-primary-600 hover:bg-primary-50 rounded-lg transition-all border border-primary-100"
+                                                >
+                                                    View Payslip
                                                 </button>
                                             </td>
                                         </tr>
@@ -200,7 +307,10 @@ const PayrollDetail = () => {
                             <div className="text-center py-8">
                                 <ShieldAlert className="w-12 h-12 text-dark-700 mx-auto mb-3" />
                                 <p className="text-dark-400 text-sm mb-4">Initial calculations are complete. Run AI audit now?</p>
-                                <button className="btn btn-primary w-full py-3">
+                                <button
+                                    onClick={handleAudit}
+                                    className="btn btn-primary w-full py-3"
+                                >
                                     Run Audit Engine
                                 </button>
                             </div>

@@ -18,6 +18,9 @@ class PayrollRecordBase(BaseModel):
     sdl_contribution: Decimal = Decimal("0")
     gross_salary: Decimal = Decimal("0")
     net_salary: Decimal = Decimal("0")
+    cpf_oa: Decimal = Decimal("0")
+    cpf_sa: Decimal = Decimal("0")
+    cpf_ma: Decimal = Decimal("0")
     breakdown: Optional[dict] = None
 
 class PayrollRecordCreate(PayrollRecordBase):
@@ -27,6 +30,10 @@ class PayrollRecordCreate(PayrollRecordBase):
 class PayrollRecordResponse(PayrollRecordBase):
     id: UUID
     status: str
+    employee_name: Optional[str] = None
+    employee_code: Optional[str] = None
+    entity_name: Optional[str] = None
+    entity_uen: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class PayrollRunBase(BaseModel):
@@ -69,4 +76,20 @@ class SalaryComponentCreate(SalaryComponentBase):
 
 class SalaryComponentResponse(SalaryComponentBase):
     id: UUID
+    model_config = ConfigDict(from_attributes=True)
+
+# --- YTD Tracking ---
+class PersonCPFSummaryBase(BaseModel):
+    year: int
+    ytd_ow: Decimal = Decimal("0")
+    ytd_aw: Decimal = Decimal("0")
+    ytd_cpf_ee: Decimal = Decimal("0")
+    ytd_cpf_er: Decimal = Decimal("0")
+    last_updated_period: Optional[date] = None
+
+class PersonCPFSummaryUpdate(PersonCPFSummaryBase):
+    pass
+
+class PersonCPFSummaryResponse(PersonCPFSummaryBase):
+    person_id: UUID
     model_config = ConfigDict(from_attributes=True)

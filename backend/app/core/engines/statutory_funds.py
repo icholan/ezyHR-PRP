@@ -1,5 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 class StatutoryFundsEngine:
     """
@@ -63,12 +63,16 @@ class StatutoryFundsEngine:
         sdl = max(self.SDL_MIN, min(self.SDL_MAX, sdl))
         return sdl.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    def calculate_shg(self, race: str, religion: str, gross_salary: Decimal) -> Decimal:
+    def calculate_shg(self, race: str, religion: str, gross_salary: Decimal, citizenship_type: str = "foreigner") -> Dict[str, Any]:
         """
         Determines the SHG type based on race/religion and calculates deduction.
-        Defaults to 0 if not matching or foreigner (logic handled outside).
+        SHG is NOT deducted for foreigners.
+        Returns a dict with 'amount' and 'type'.
         """
-        shg_type = None
+        if citizenship_type == "foreigner":
+            return {"amount": Decimal("0.00"), "type": "NONE (Foreigner)"}
+
+        shg_type = "NONE"
         # Simplified mapping logic
         race = race.upper() if race else ""
         if "CHINESE" in race:
@@ -80,15 +84,15 @@ class StatutoryFundsEngine:
         elif "EURASIAN" in race:
             shg_type = "ECF"
         
-        if not shg_type or gross_salary <= 0:
-            return Decimal("0.00")
+        if shg_type == "NONE" or gross_salary <= 0:
+            return {"amount": Decimal("0.00"), "type": "NONE"}
             
         rates = self.SHG_RATES.get(shg_type, [])
         for limit, amount in rates:
             if gross_salary <= limit:
-                return amount
+                return {"amount": amount, "type": shg_type}
         
-        return Decimal("0.00")
+        return {"amount": Decimal("0.00"), "type": shg_type}
 
 # Singleton instance
 statutory_funds_engine = StatutoryFundsEngine()

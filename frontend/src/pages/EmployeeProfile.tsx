@@ -71,6 +71,15 @@ interface BankDetail {
     is_default: boolean;
 }
 
+interface YTDDetail {
+    year: number;
+    ytd_ow: number;
+    ytd_aw: number;
+    ytd_cpf_ee: number;
+    ytd_cpf_er: number;
+    last_updated_period: string | null;
+}
+
 interface SalaryComponent {
     id?: string;
     component: string;
@@ -133,6 +142,9 @@ const EmployeeProfile = () => {
     const [saving, setSaving] = useState(false);
     const [showDeactivateModal, setShowDeactivateModal] = useState(false);
     const [deactivating, setDeactivating] = useState(false);
+    const [showYtdModal, setShowYtdModal] = useState(false);
+    const [selectedYtd, setSelectedYtd] = useState<YTDDetail | null>(null);
+    const [submittingYtd, setSubmittingYtd] = useState(false);
 
     // Editable copies
     const [editPerson, setEditPerson] = useState<Partial<PersonDetail>>({});
@@ -143,6 +155,10 @@ const EmployeeProfile = () => {
     const [departments, setDepartments] = useState<any[]>([]);
     const [grades, setGrades] = useState<any[]>([]);
     const [groups, setGroups] = useState<any[]>([]);
+
+    // YTD Data
+    const [ytdData, setYtdData] = useState<YTDDetail[]>([]);
+    const [loadingYtd, setLoadingYtd] = useState(false);
 
     useEffect(() => {
         if (data?.employment?.entity_id) {
@@ -197,6 +213,23 @@ const EmployeeProfile = () => {
             fetchBalances();
         }
     }, [activeTab, data?.employment?.id]);
+
+    useEffect(() => {
+        if (activeTab === 'financial' && data?.person?.id) {
+            const fetchYTD = async () => {
+                setLoadingYtd(true);
+                try {
+                    const resp = await api.get(`/api/v1/payroll/ytd/${data.person.id}`);
+                    setYtdData(resp.data);
+                } catch (err) {
+                    console.error('Failed to fetch YTD data', err);
+                } finally {
+                    setLoadingYtd(false);
+                }
+            };
+            fetchYTD();
+        }
+    }, [activeTab, data?.person?.id]);
 
     const enterEditMode = () => {
         if (!data) return;
@@ -881,6 +914,47 @@ const EmployeeProfile = () => {
                                 No bank account linked
                             </div>
                         )}
+
+                        {/* YTD Summary Section */}
+                        <div className="pt-8 border-t border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-dark-950 dark:text-gray-50 font-premium">Year-To-Date (YTD) Summary</h3>
+                                    <p className="text-sm text-gray-500">Annual CPF-liable wages for the current calendar year</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const currentYear = new Date().getFullYear();
+                                        const existing = ytdData.find(y => y.year === currentYear);
+                                        setSelectedYtd(existing || { year: currentYear, ytd_ow: 0, ytd_aw: 0, ytd_cpf_ee: 0, ytd_cpf_er: 0, last_updated_period: null });
+                                        setShowYtdModal(true);
+                                    }}
+                                    className="px-4 py-2 text-xs font-bold text-primary-600 hover:bg-primary-50 rounded-xl border border-primary-200 transition-all"
+                                >
+                                    Adjust YTD
+                                </button>
+                            </div>
+
+                            {loadingYtd ? (
+                                <div className="h-32 bg-gray-50 dark:bg-gray-800/50 rounded-[24px] animate-pulse"></div>
+                            ) : ytdData.length === 0 ? (
+                                <div className="bg-gray-50 dark:bg-gray-800/20 rounded-2xl p-8 border-2 border-dashed border-gray-200 dark:border-gray-800 text-center">
+                                    <Clock className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                    <p className="text-sm text-gray-500">No YTD data available for this year. Data will populate after the first payroll run.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {ytdData.map((ytd) => (
+                                        <React.Fragment key={ytd.year}>
+                                            <YTDCard label={`YTD OW (${ytd.year})`} value={ytd.ytd_ow} color="bg-primary-50 text-primary-700" />
+                                            <YTDCard label="YTD AW" value={ytd.ytd_aw} color="bg-orange-50 text-orange-700" />
+                                            <YTDCard label="CPF (EE)" value={ytd.ytd_cpf_ee} color="bg-emerald-50 text-emerald-700" />
+                                            <YTDCard label="CPF (ER)" value={ytd.ytd_cpf_er} color="bg-blue-50 text-blue-700" />
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -975,6 +1049,94 @@ const EmployeeProfile = () => {
                     </div>
                 )
             }
+
+            {/* YTD Adjustment Modal */}
+            {showYtdModal && selectedYtd && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-lg w-full mx-4 shadow-2xl border border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50 font-premium">Adjust YTD Totals ({selectedYtd.year})</h3>
+                            <button onClick={() => setShowYtdModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
+                                <X className="w-5 h-5 text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 mb-8">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">YTD Ordinary Wages (OW)</label>
+                                    <input
+                                        type="number"
+                                        className="input-field"
+                                        value={selectedYtd.ytd_ow}
+                                        onChange={e => setSelectedYtd({ ...selectedYtd, ytd_ow: parseFloat(e.target.value) || 0 })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">YTD Additional Wages (AW)</label>
+                                    <input
+                                        type="number"
+                                        className="input-field"
+                                        value={selectedYtd.ytd_aw}
+                                        onChange={e => setSelectedYtd({ ...selectedYtd, ytd_aw: parseFloat(e.target.value) || 0 })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">YTD CPF Employee Share</label>
+                                    <input
+                                        type="number"
+                                        className="input-field"
+                                        value={selectedYtd.ytd_cpf_ee}
+                                        onChange={e => setSelectedYtd({ ...selectedYtd, ytd_cpf_ee: parseFloat(e.target.value) || 0 })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">YTD CPF Employer Share</label>
+                                    <input
+                                        type="number"
+                                        className="input-field"
+                                        value={selectedYtd.ytd_cpf_er}
+                                        onChange={e => setSelectedYtd({ ...selectedYtd, ytd_cpf_er: parseFloat(e.target.value) || 0 })}
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl border border-amber-100 italic">
+                                Note: These totals are used to calculate the annual CPF AW Ceiling. Manual adjustments should only be made for mid-year data migration or error corrections.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setShowYtdModal(false)}
+                                className="px-6 py-2.5 rounded-xl font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 transition-all font-premium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setSubmittingYtd(true);
+                                    try {
+                                        await api.put(`/api/v1/payroll/ytd/${data?.person?.id}`, selectedYtd);
+                                        toast.success("YTD Totals Updated");
+                                        // Refresh YTD data
+                                        const resp = await api.get(`/api/v1/payroll/ytd/${data?.person?.id}`);
+                                        setYtdData(resp.data);
+                                        setShowYtdModal(false);
+                                    } catch (err) {
+                                        toast.error("Failed to update YTD");
+                                    } finally {
+                                        setSubmittingYtd(false);
+                                    }
+                                }}
+                                disabled={submittingYtd}
+                                className="btn btn-primary px-8 py-2.5 shadow-lg shadow-primary-200"
+                            >
+                                {submittingYtd ? "Saving..." : "Save Changes"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };
@@ -1050,6 +1212,15 @@ const SelectField = ({ label, value, editing, options, onChange }: SelectFieldPr
                 </span>
             </div>
         )}
+    </div>
+);
+
+const YTDCard = ({ label, value, color }: { label: string; value: number; color: string }) => (
+    <div className={clsx("rounded-2xl p-5 border border-transparent dark:border-gray-800 shadow-sm", color)}>
+        <p className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-1">{label}</p>
+        <p className="text-lg font-black font-premium">
+            ${Number(value).toLocaleString('en-SG', { minimumFractionDigits: 2 })}
+        </p>
     </div>
 );
 

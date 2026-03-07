@@ -13,7 +13,8 @@ import {
     ChevronLeft,
     ChevronRight,
     Scale,
-    ShieldCheck
+    ShieldCheck,
+    PieChart
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -24,7 +25,9 @@ const adminMenuItems = [
     { icon: Globe, label: 'Tenants', path: '/admin/tenants' },
     { icon: Scale, label: 'Statutory Rules', path: '/admin/statutory-rules' },
     { icon: ShieldCheck, label: 'CPF Rates', path: '/admin/cpf-rates' },
+    { icon: PieChart, label: 'CPF Allocations', path: '/admin/cpf-allocations' },
     { icon: Users, label: 'SHG Rates', path: '/admin/shg-rates' },
+    { icon: Activity, label: 'SDL Rates', path: '/admin/sdl-rates' },
     { icon: CreditCard, label: 'Subscriptions', path: '/admin/billing' },
     { icon: Database, label: 'Infrastructure', path: '/admin/infra' },
     { icon: ShieldAlert, label: 'Security Logs', path: '/admin/security' },

@@ -32,8 +32,11 @@ class PayrollEngine:
         upl_deduction = (basic_salary / Decimal(str(working_days_in_month)) * unpaid_leave_days).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         
         # OT Pay
-        ot_pay_1_5 = ot_engine.calculate_ot_pay(basic_salary, ot_hours_1_5x, DayType.NORMAL)["ot_pay"]
-        ot_pay_2_0 = ot_engine.calculate_ot_pay(basic_salary, ot_hours_2x, DayType.REST_DAY)["ot_pay"]
+        ot_res_1_5 = ot_engine.calculate_ot_pay(basic_salary, ot_hours_1_5x, DayType.NORMAL)
+        ot_res_2_0 = ot_engine.calculate_ot_pay(basic_salary, ot_hours_2x, DayType.REST_DAY)
+        
+        ot_pay_1_5 = ot_res_1_5["ot_pay"]
+        ot_pay_2_0 = ot_res_2_0["ot_pay"]
         total_ot_pay = ot_pay_1_5 + ot_pay_2_0
         
         # Gross Pay (Before deductions)
@@ -52,53 +55,59 @@ class PayrollEngine:
         citizenship = person_meta.get("citizenship_type", "foreigner")
         if citizenship in ["citizen", "pr"]:
             age = person_meta.get("age", 30)
-            # Simplified: assuming rates are passed or fetched inside a higher-level service
-            # For this engine, we expect the rates to be provided in person_meta for purity
             ee_rate = person_meta.get("cpf_ee_rate", Decimal("0.20"))
             er_rate = person_meta.get("cpf_er_rate", Decimal("0.17"))
             
-            # Use ceilings from meta if provided, otherwise default to defaults in cpf_engine
-            ow_ceiling = person_meta.get("ow_ceiling")
-            aw_ceiling = person_meta.get("aw_ceiling")
+            # 3.1 Calculate Combined Monthly CPF (Strict Compliance Rule 4)
+            allocations = person_meta.get("cpf_allocations")
+            cpf_result = cpf_engine.calculate_monthly_cpf(
+                ow_amount=ow_amount,
+                aw_amount=aw_amount,
+                ytd_ow=ytd_meta.get("ytd_ow", Decimal("0")),
+                ytd_aw_calculated=ytd_meta.get("ytd_aw_calculated", Decimal("0")),
+                employee_rate=ee_rate,
+                employer_rate=er_rate,
+                ow_ceiling=person_meta.get("ow_ceiling", Decimal("6800.00")),
+                aw_ceiling_total=person_meta.get("aw_ceiling", Decimal("102000.00")),
+                allocation_ratios=allocations
+            )
             
-            ow_params = {"ow_amount": ow_amount, "employee_rate": ee_rate, "employer_rate": er_rate}
-            if ow_ceiling: ow_params["ow_ceiling"] = ow_ceiling
-            
-            aw_params = {
-                "aw_amount": aw_amount, 
-                "ytd_ow": ytd_meta.get("ytd_ow", Decimal("0")), 
-                "ytd_aw_calculated": ytd_meta.get("ytd_aw_calculated", Decimal("0")), 
-                "employee_rate": ee_rate, 
-                "employer_rate": er_rate
-            }
-            if aw_ceiling: aw_params["aw_ceiling_total"] = aw_ceiling
+            cpf_ee = cpf_result["cpf_ee"]
+            cpf_er = cpf_result["cpf_er"]
 
-            ow_result = cpf_engine.calculate_ow_cpf(**ow_params)
-            aw_result = cpf_engine.calculate_aw_cpf(**aw_params)
-            
-            cpf_ee = ow_result["cpf_ee_ow"] + aw_result["cpf_ee_aw"]
-            cpf_er = ow_result["cpf_er_ow"] + aw_result["cpf_er_aw"]
+            # Combined Account Allocation
+            if allocations and "allocation" in cpf_result:
+                person_meta["computed_allocation"] = cpf_result["allocation"]
 
         # 4. Calculate SHG and SDL
-        shg_deduction = statutory_funds_engine.calculate_shg(
+        shg_result = statutory_funds_engine.calculate_shg(
             person_meta.get("race"), 
             person_meta.get("religion"), 
-            gross_pay
+            gross_pay,
+            citizenship_type=citizenship
         )
+        shg_deduction = shg_result["amount"]
         sdl_contribution = statutory_funds_engine.calculate_sdl(gross_pay)
         
         # 5. Calculate Net Pay
+        # Note: 'deductions' here are other deductions (e.g. gym, loans)
         net_pay = gross_pay - cpf_ee - shg_deduction - deductions
         
         return {
             "basic_salary": basic_salary,
+            "hourly_rate": ot_res_1_5["hourly_rate"],
             "deductions": {
                 "unpaid_leave": upl_deduction,
                 "cpf_employee": cpf_ee,
-                "shg": shg_deduction
+                "shg": shg_deduction,
+                "shg_type": shg_result["type"]
             },
             "earnings": {
                 "ot_pay": total_ot_pay,
+                "ot_1_5_hours": ot_hours_1_5x,
+                "ot_1_5_pay": ot_pay_1_5,
+                "ot_2_0_hours": ot_hours_2x,
+                "ot_2_0_pay": ot_pay_2_0,
                 "allowances": allowances,
                 "bonus": bonus
             },
