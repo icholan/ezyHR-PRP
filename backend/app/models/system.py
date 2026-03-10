@@ -25,6 +25,7 @@ class AuditLog(Base, IDMixin):
     action: Mapped[str] = mapped_column(String(20), nullable=False)  # INSERT | UPDATE | DELETE
     old_value: Mapped[dict] = mapped_column(JSONB, nullable=True)
     new_value: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    ip_address: Mapped[str] = mapped_column(String(50), nullable=True)
     impersonated_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("platform_admins.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
