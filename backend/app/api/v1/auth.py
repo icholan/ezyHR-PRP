@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -6,13 +6,16 @@ from app.core.database import get_db
 from app.models.auth import User
 from app.schemas.auth import LoginRequest, Token
 from app.core.security.auth import verify_password, create_tenant_user_token
+from app.api.v1.dependencies import get_current_active_user
 from datetime import datetime
+from app.services.audit import AuditService
 
 router = APIRouter(prefix="/auth", tags=["Tenant Auth"])
 
 @router.post("/login", response_model=Token)
 async def login(
     request: LoginRequest,
+    req: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -99,9 +102,44 @@ async def login(
         "display_name": user.full_name
     }
     
+    # Log the successful login
+    await AuditService.log_system_event(
+        db=db,
+        action="LOGIN",
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        ip_address=req.client.host if req.client else None,
+        details={"email": user.email, "display_name": user.full_name}
+    )
+    
+    await db.commit()
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "mfa_required": user.two_fa_enabled,
         "user": user_data
     }
+
+@router.post("/logout")
+async def logout(
+    req: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Logs out the user and records the event in the system audit log.
+    Client is responsible for clearing its local token.
+    """
+    await AuditService.log_system_event(
+        db=db,
+        action="LOGOUT",
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None,
+        details={"email": current_user.email, "display_name": current_user.full_name}
+    )
+    
+    await db.commit()
+    
+    return {"message": "Logged out successfully"}

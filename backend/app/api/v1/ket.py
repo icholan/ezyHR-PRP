@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import uuid
@@ -21,11 +21,17 @@ async def get_ket_dashboard(
 @router.post("/generate", response_model=KETRead)
 async def generate_ket_snapshot(
     data: KETCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     service = KETService(db)
-    return await service.generate_ket_snapshot(data.employment_id, current_user.tenant_id)
+    return await service.generate_ket_snapshot(
+        data.employment_id, 
+        current_user.tenant_id, 
+        user_id=current_user.id,
+        ip_address=req.client.host if req.client else None
+    )
 
 @router.get("/{ket_id}", response_model=KETRead)
 async def get_ket_detail(
@@ -43,6 +49,7 @@ async def get_ket_detail(
 async def update_ket_status(
     ket_id: uuid.UUID,
     data: KETUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -50,7 +57,9 @@ async def update_ket_status(
     updated = await service.update_ket_status(
         ket_id, 
         data.status, 
-        signed_by=data.signed_by_employee_id
+        user_id=current_user.id,
+        signed_by=data.signed_by_employee_id,
+        ip_address=req.client.host if req.client else None
     )
     if not updated:
         raise HTTPException(status_code=404, detail="KET not found")

@@ -11,7 +11,7 @@ New Phase 1 endpoints added:
   - GET  /leave/policies             → list company overrides for entity
   - POST /leave/policies             → add override
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from typing import List, Optional
@@ -50,12 +50,17 @@ router = APIRouter(prefix="/leave", tags=["Leave"], redirect_slashes=False)
 @router.post("/apply", response_model=dict)
 async def apply_leave(
     req_data: LeaveRequestCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     service = LeaveService(db)
     try:
-        request, conflicts = await service.apply_leave(req_data)
+        request, conflicts = await service.apply_leave(
+            req_data, 
+            user_id=current_user.id, 
+            ip_address=req.client.host if req.client else None
+        )
         await db.commit()
         await db.refresh(request)
         return {
@@ -133,6 +138,7 @@ async def get_leave_requests(
 async def update_leave_request(
     request_id: uuid.UUID,
     update_data: LeaveRequestUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -142,7 +148,8 @@ async def update_leave_request(
             request_id=request_id,
             status=update_data.status,
             admin_user_id=current_user.id,
-            rejection_reason=update_data.rejection_reason
+            rejection_reason=update_data.rejection_reason,
+            ip_address=req.client.host if req.client else None
         )
         await db.commit()
         return {"status": "success", "message": f"Leave request updated to {update_data.status}"}
@@ -172,6 +179,7 @@ async def get_leave_types(
 async def create_leave_type(
     entity_id: uuid.UUID,
     payload: LeaveTypeCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -180,6 +188,18 @@ async def create_leave_type(
     try:
         await db.commit()
         await db.refresh(lt)
+        
+        # Audit Log
+        await AuditService.log_action(
+            db=db,
+            action="INSERT",
+            table_name="leave_types",
+            record_id=lt.id,
+            new_value=payload.model_dump(mode="json"),
+            user_id=current_user.id,
+            tenant_id=current_user.tenant_id,
+            ip_address=req.client.host if req.client else None
+        )
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=400, detail="Leave type code already exists. Please choose a unique code.")
@@ -191,6 +211,7 @@ async def update_leave_type(
     type_id: uuid.UUID,
     entity_id: uuid.UUID,
     payload: LeaveTypeUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -200,11 +221,28 @@ async def update_leave_type(
     lt = result.scalar_one_or_none()
     if not lt:
         raise HTTPException(status_code=404, detail="Leave type not found")
+        
+    from app.services.audit import to_dict
+    old_val = to_dict(lt)
+    
     for field, val in payload.model_dump(exclude_none=True).items():
         setattr(lt, field, val)
     try:
         await db.commit()
         await db.refresh(lt)
+        
+        # Audit Log
+        await AuditService.log_action(
+            db=db,
+            action="UPDATE",
+            table_name="leave_types",
+            record_id=type_id,
+            old_value=old_val,
+            new_value=payload.model_dump(mode="json", exclude_unset=True),
+            user_id=current_user.id,
+            tenant_id=current_user.tenant_id,
+            ip_address=req.client.host if req.client else None
+        )
     except IntegrityError:
         await db.rollback()
         raise HTTPException(status_code=400, detail="Leave type code already exists. Please choose a unique code.")
@@ -215,6 +253,7 @@ async def update_leave_type(
 async def delete_leave_type(
     type_id: uuid.UUID,
     entity_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -224,8 +263,25 @@ async def delete_leave_type(
     lt = result.scalar_one_or_none()
     if not lt:
         raise HTTPException(status_code=404, detail="Leave type not found")
+        
+    from app.services.audit import to_dict
+    old_val = to_dict(lt)
+    
     lt.is_active = False
     await db.commit()
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="leave_types",
+        record_id=type_id,
+        old_value=old_val,
+        new_value={"is_active": False},
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
     return {"status": "success", "message": "Leave type deactivated"}
 
 
@@ -486,6 +542,7 @@ async def list_entitlements(
 @router.post("/entitlements", response_model=dict)
 async def create_entitlement(
     payload: LeaveEntitlementCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -500,7 +557,9 @@ async def create_entitlement(
             leave_type_id=payload.leave_type_id,
             year=payload.year,
             total_days=payload.total_days,
-            carried_over_days=payload.carried_over_days
+            carried_over_days=payload.carried_over_days,
+            user_id=current_user.id,
+            ip_address=req.client.host if req.client else None
         )
         await db.commit()
         return {"status": "success", "message": "Entitlement created."}
@@ -511,6 +570,7 @@ async def create_entitlement(
 async def update_entitlement(
     entitlement_id: uuid.UUID,
     payload: LeaveEntitlementUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -523,7 +583,9 @@ async def update_entitlement(
         ent = await service.update_entitlement(
             entitlement_id, 
             total_days=payload.total_days, 
-            carried_over_days=payload.carried_over_days
+            carried_over_days=payload.carried_over_days,
+            user_id=current_user.id,
+            ip_address=req.client.host if req.client else None
         )
         await db.commit()
         return {"status": "success", "message": "Entitlement updated."}

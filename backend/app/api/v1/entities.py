@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -11,6 +11,7 @@ from app.api.v1.dependencies import get_current_user
 from app.schemas.entities import EntityRead, EntityCreate, EntityUpdate
 from datetime import datetime
 from app.services.leave import LeaveService
+from app.services.audit import AuditService
 
 router = APIRouter(prefix="/entities", tags=["Entities"])
 
@@ -37,6 +38,7 @@ async def list_entities(
 @router.post("", response_model=EntityRead, status_code=status.HTTP_201_CREATED)
 async def create_entity(
     entity_in: EntityCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -70,6 +72,18 @@ async def create_entity(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     await db.refresh(db_entity)
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="INSERT",
+        table_name="entities",
+        record_id=db_entity.id,
+        new_value=entity_in.model_dump(mode="json"),
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
     
     # Auto-seed standard leave types for the new entity
     try:
@@ -85,6 +99,7 @@ async def create_entity(
 async def update_entity(
     entity_id: uuid.UUID,
     entity_in: EntityUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -102,6 +117,9 @@ async def update_entity(
     if not db_entity:
         raise HTTPException(status_code=404, detail="Entity not found")
         
+    from app.services.audit import to_dict
+    old_val = to_dict(db_entity)
+    
     update_data = entity_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_entity, field, value)
@@ -123,11 +141,26 @@ async def update_entity(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     await db.refresh(db_entity)
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="entities",
+        record_id=entity_id,
+        old_value=old_val,
+        new_value=entity_in.model_dump(mode="json", exclude_unset=True),
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
+
     return db_entity
 
 @router.delete("/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_entity(
     entity_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -145,5 +178,21 @@ async def delete_entity(
     if not db_entity:
         raise HTTPException(status_code=404, detail="Entity not found")
         
+    from app.services.audit import to_dict
+    old_val = to_dict(db_entity)
+    
     db_entity.is_active = False
     await db.commit()
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="entities",
+        record_id=entity_id,
+        old_value=old_val,
+        new_value={"is_active": False},
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )

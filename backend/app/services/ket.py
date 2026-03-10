@@ -8,6 +8,7 @@ from app.models.employment import Employment, Person, Department
 from app.models.payroll import SalaryStructure
 from app.models.tenant import Entity
 from app.schemas.ket import KETDashboardResponse, KETSummary, KETRead
+from app.services.audit import AuditService
 
 class KETService:
     def __init__(self, db: AsyncSession):
@@ -83,7 +84,7 @@ class KETService:
 
         return KETDashboardResponse(stats=stats, items=items)
 
-    async def generate_ket_snapshot(self, employment_id: uuid.UUID, tenant_id: uuid.UUID) -> KETRead:
+    async def generate_ket_snapshot(self, employment_id: uuid.UUID, tenant_id: uuid.UUID, user_id: uuid.UUID = None, ip_address: str = None) -> KETRead:
         """Create a new KET version from current employment terms."""
         # 1. Fetch full details
         query = (
@@ -162,18 +163,35 @@ class KETService:
             terms_json=terms
         )
         self.db.add(new_ket)
+        await self.db.flush() # Get ID
+        
+        # Audit Log
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT",
+            table_name="key_employment_terms",
+            record_id=new_ket.id,
+            new_value=terms,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         await self.db.commit()
         await self.db.refresh(new_ket)
         
         return KETRead.from_orm(new_ket)
 
-    async def update_ket_status(self, ket_id: uuid.UUID, status: str, signed_by: Optional[uuid.UUID] = None) -> Optional[KeyEmploymentTerm]:
+    async def update_ket_status(self, ket_id: uuid.UUID, status: str, user_id: uuid.UUID = None, signed_by: Optional[uuid.UUID] = None, ip_address: str = None) -> Optional[KeyEmploymentTerm]:
         """Progress KET status."""
         query = select(KeyEmploymentTerm).where(KeyEmploymentTerm.id == ket_id)
         res = await self.db.execute(query)
         ket = res.scalar_one_or_none()
         if not ket:
             return None
+        
+        from app.services.audit import to_dict
+        old_value = to_dict(ket)
         
         ket.status = status
         if status == "issued":
@@ -182,6 +200,19 @@ class KETService:
             ket.signed_at = datetime.now()
             ket.signed_by_employee_id = signed_by
             
+        # Audit Log
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="key_employment_terms",
+            record_id=ket_id,
+            old_value=old_value,
+            new_value={"status": status},
+            user_id=user_id,
+            tenant_id=ket.tenant_id,
+            ip_address=ip_address
+        )
+
         await self.db.commit()
         return ket
 

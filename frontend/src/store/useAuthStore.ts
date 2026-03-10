@@ -23,7 +23,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             user: null,
             token: null,
             isAuthenticated: false,
@@ -36,7 +36,22 @@ export const useAuthStore = create<AuthState>()(
                     user: state.user ? { ...state.user, selected_entity_id: entityId } : null
                 }));
             },
-            logout: () => {
+            logout: async () => {
+                const currentToken = get().token;
+                if (currentToken) {
+                    try {
+                        await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/auth/logout`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${currentToken}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Logout API call failed:', error);
+                    }
+                }
+
                 localStorage.removeItem('token');
                 set({ user: null, token: null, isAuthenticated: false });
             },

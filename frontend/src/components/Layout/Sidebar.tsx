@@ -27,7 +27,7 @@ const menuGroups = [
         title: 'General',
         items: [
             { icon: LayoutDashboard, label: 'Overview', path: '/dashboard' },
-            { icon: ShieldCheck, label: 'AI Audit', path: '/audit' },
+            { icon: ShieldCheck, label: 'Audit Trail', path: '/audit', isAdmin: true },
             { icon: FileText, label: 'Reports', path: '/reports' },
         ]
     },

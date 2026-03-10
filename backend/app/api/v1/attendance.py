@@ -1,5 +1,5 @@
 import fastapi
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import date
@@ -23,6 +23,7 @@ router = APIRouter(prefix="/attendance", tags=["Attendance"])
 @router.post("/punch", response_model=AttendanceRecordRead)
 async def punch(
     punch_data: AttendancePunch,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -37,7 +38,8 @@ async def punch(
             employment_id=punch_data.employment_id,
             punch_type=punch_data.punch_type,
             timestamp=punch_data.timestamp,
-            source=punch_data.source
+            source=punch_data.source,
+            ip_address=req.client.host if req.client else None
         )
         await db.commit()
         return record
@@ -271,6 +273,7 @@ async def confirm_timesheet(
 @router.post("/records", response_model=AttendanceRecordRead)
 async def create_manual_record(
     data: AttendanceRecordCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -278,7 +281,7 @@ async def create_manual_record(
     await get_entity_access(data.entity_id, current_user, db)
     
     service = AttendanceService(db)
-    record = await service.create_manual_punch(data)
+    record = await service.create_manual_punch(data, user_id=current_user.id, ip_address=req.client.host if req.client else None)
     await db.commit()
     return record
 
@@ -286,6 +289,7 @@ async def create_manual_record(
 async def update_attendance_record(
     record_id: uuid.UUID,
     data: AttendanceRecordUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -302,13 +306,14 @@ async def update_attendance_record(
     from app.api.v1.dependencies import get_entity_access
     await get_entity_access(record.entity_id, current_user, db)
     
-    updated = await service.update_attendance_record(record_id, data)
+    updated = await service.update_attendance_record(record_id, data, user_id=current_user.id, ip_address=req.client.host if req.client else None)
     await db.commit()
     return updated
 
 @router.delete("/records/{record_id}")
 async def delete_attendance_record(
     record_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -324,7 +329,7 @@ async def delete_attendance_record(
     from app.api.v1.dependencies import get_entity_access
     await get_entity_access(record.entity_id, current_user, db)
     
-    await service.delete_attendance_record(record_id)
+    await service.delete_attendance_record(record_id, user_id=current_user.id, ip_address=req.client.host if req.client else None)
     await db.commit()
     return {"message": "Record deleted successfully"}
 
@@ -340,7 +345,7 @@ async def create_shift(
     await get_entity_access(shift_in.entity_id, current_user, db)
     
     service = AttendanceService(db)
-    shift = await service.create_shift(shift_in)
+    shift = await service.create_shift(shift_in, user_id=current_user.id)
     await db.commit()
     return shift
 
@@ -371,7 +376,7 @@ async def update_shift(
     from app.api.v1.dependencies import get_entity_access
     await get_entity_access(shift.entity_id, current_user, db)
     
-    updated_shift = await service.update_shift(shift_id, shift_update)
+    updated_shift = await service.update_shift(shift_id, shift_update, user_id=current_user.id)
     await db.commit()
     return updated_shift
 
@@ -389,7 +394,7 @@ async def delete_shift(
     from app.api.v1.dependencies import get_entity_access
     await get_entity_access(shift.entity_id, current_user, db)
     
-    await service.delete_shift(shift_id)
+    await service.delete_shift(shift_id, user_id=current_user.id)
     await db.commit()
     return {"message": "Shift deleted successfully"}
 
@@ -410,7 +415,7 @@ async def bulk_update_breaks(
     from app.api.v1.dependencies import get_entity_access
     await get_entity_access(shift.entity_id, current_user, db)
     
-    updated_breaks = await service.replace_shift_breaks(shift_id, breaks)
+    updated_breaks = await service.replace_shift_breaks(shift_id, breaks, user_id=current_user.id)
     await db.commit()
     return updated_breaks
 
@@ -469,7 +474,7 @@ async def auto_generate_roster(
     await get_entity_access(data.entity_id, current_user, db)
     
     service = AttendanceService(db)
-    rosters = await service.auto_generate_roster(data)
+    rosters = await service.auto_generate_roster(data, user_id=current_user.id)
     await db.commit()
     return rosters
 
@@ -498,7 +503,7 @@ async def bulk_assign_roster(
     await get_entity_access(bulk_data.entity_id, current_user, db)
     
     service = AttendanceService(db)
-    rosters = await service.assign_roster_bulk(bulk_data)
+    rosters = await service.assign_roster_bulk(bulk_data, user_id=current_user.id)
     await db.commit()
     return rosters
 
@@ -510,7 +515,7 @@ async def update_roster_cell(
     current_user: User = Depends(get_current_user)
 ):
     service = AttendanceService(db)
-    roster = await service.update_roster_cell(roster_id, cell_update.shift_id, cell_update.day_type)
+    roster = await service.update_roster_cell(roster_id, cell_update.shift_id, cell_update.day_type, user_id=current_user.id)
     if not roster:
         raise HTTPException(status_code=404, detail="Roster entry not found")
     await db.commit()

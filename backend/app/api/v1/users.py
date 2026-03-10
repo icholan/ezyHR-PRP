@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -9,7 +9,8 @@ import logging
 from app.core.database import get_db
 from app.models.auth import User, UserEntityAccess
 from app.schemas.users import UserRead, UserCreate, UserUpdate, UserList
-from app.api.v1.dependencies import get_current_user
+from app.api.v1.dependencies import get_current_user, get_db
+from app.services.audit import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ async def get_user(
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_in: UserCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -116,6 +118,18 @@ async def create_user(
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="INSERT",
+        table_name="users",
+        record_id=db_user.id,
+        new_value=user_in.model_dump(mode="json", exclude={"password"}),
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
     
     # Handle entity access
     if user_in.entity_access:
@@ -143,6 +157,7 @@ async def create_user(
 async def update_user(
     user_id: uuid.UUID,
     user_in: UserUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -158,6 +173,9 @@ async def update_user(
     
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
+        
+    from app.services.audit import to_dict
+    old_val = to_dict(db_user)
         
     update_data = user_in.model_dump(exclude_unset=True)
     
@@ -193,12 +211,27 @@ async def update_user(
             
     await db.commit()
     await db.refresh(db_user, ["entity_access"])
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="users",
+        record_id=user_id,
+        old_value=old_val,
+        new_value=user_in.model_dump(mode="json", exclude={"password"}, exclude_unset=True),
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
+
     return db_user
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -218,5 +251,21 @@ async def delete_user(
     if db_user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
         
+    from app.services.audit import to_dict
+    old_val = to_dict(db_user)
+    
     db_user.is_active = False
     await db.commit()
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="users",
+        record_id=user_id,
+        old_value=old_val,
+        new_value={"is_active": False},
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )

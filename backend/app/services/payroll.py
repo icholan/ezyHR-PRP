@@ -14,6 +14,7 @@ from app.models.payroll import SalaryStructure, PersonCPFSummary
 from app.models.leave import LeaveRequest, LeaveType
 from app.models.attendance import MonthlyOTSummary
 from app.services.leave import LeaveService
+from app.services.audit import AuditService
 import calendar
 
 class PayrollService:
@@ -21,18 +22,6 @@ class PayrollService:
     Handles higher-level payroll operations like Processing an entire Entity.
     """
 
-    async def process_entity_payroll(
-        self,
-        db: AsyncSession,
-        run_id: uuid.UUID
-    ) -> int:
-        """
-        Iterates through all active employments for the entity and generates records.
-        """
-        result = await db.execute(select(PayrollRun).where(PayrollRun.id == run_id))
-        run = result.scalar_one_or_none()
-        if not run:
-            return 0
 
     async def reverse_run_ytd(self, db: AsyncSession, run_id: uuid.UUID):
         """
@@ -64,7 +53,7 @@ class PayrollService:
                 summary.ytd_cpf_ee = float(summary.ytd_cpf_ee or 0) - float(rec.cpf_employee or 0)
                 summary.ytd_cpf_er = float(summary.ytd_cpf_er or 0) - float(rec.cpf_employer or 0)
 
-    async def delete_payroll_run(self, db: AsyncSession, run_id: uuid.UUID):
+    async def delete_payroll_run(self, db: AsyncSession, run_id: uuid.UUID, user_id: uuid.UUID = None, ip_address: str = None):
         """
         Hard deletes a payroll run and all related records (via CASCADE).
         Reverses YTD summaries first.
@@ -76,12 +65,39 @@ class PayrollService:
         
         # 2. Delete the run (CASCADE handles records, flags, etc.)
         await db.execute(delete(PayrollRun).where(PayrollRun.id == run_id))
+        
+        # Audit Log
+        # Get tenant_id from Entity
+        from app.models.tenant import Entity
+        result_run = await db.execute(select(PayrollRun).where(PayrollRun.id == run_id))
+        run_obj = result_run.scalar_one_or_none()
+        
+        if run_obj:
+            from app.services.audit import to_dict
+            old_value = to_dict(run_obj)
+            
+            stmt_ent = select(Entity.tenant_id).where(Entity.id == run_obj.entity_id)
+            tenant_id = (await db.execute(stmt_ent)).scalar()
+
+            await AuditService.log_action(
+                db=db,
+                action="DELETE",
+                table_name="payroll_runs",
+                record_id=run_id,
+                old_value=old_value,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                ip_address=ip_address
+            )
+
         await db.commit()
 
     async def process_entity_payroll(
         self,
         db: AsyncSession,
-        run_id: uuid.UUID
+        run_id: uuid.UUID,
+        user_id: uuid.UUID = None,
+        ip_address: str = None
     ) -> int:
         """
         Iterates through all active employments for the entity and generates records.
@@ -344,6 +360,24 @@ class PayrollService:
         run.total_employees = processed_count
         run.status = "processed"
         
+        # Audit Log
+        # Get tenant_id from Entity
+        from app.models.tenant import Entity
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == run.entity_id)
+        tenant_id = (await db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=db,
+            action="UPDATE",
+            table_name="payroll_runs",
+            record_id=run_id,
+            old_value={"status": "draft"},
+            new_value={"status": "processed", "records_count": processed_count},
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         await db.commit()
         return processed_count
 

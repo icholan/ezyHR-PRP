@@ -14,6 +14,7 @@ import PayrollDetail from './pages/PayrollDetail';
 import Payslip from './pages/Payslip';
 import Attendance from './pages/Attendance';
 import MultiEntityManagement from './pages/MultiEntityManagement';
+import AuditTrail from './pages/AuditTrail';
 import LeaveManagement from './pages/LeaveManagement';
 import KETDashboard from './pages/KETDashboard';
 import KETEditor from './pages/KETEditor';
@@ -69,7 +70,7 @@ function App() {
                     <Route path="attendance/roster" element={<RosterManagement />} />
                     <Route path="attendance/import" element={<ImportTimesheet />} />
                     <Route path="attendance/public-holidays" element={<PublicHolidays />} />
-                    <Route path="audit" element={<div>AI Audit Panel</div>} />
+                    <Route path="audit" element={<AuditTrail />} />
                     <Route path="reports" element={<Reports />} />
                     <Route path="settings/users" element={<UserSettings />} />
                     <Route path="settings/entities" element={<EntityManagement />} />

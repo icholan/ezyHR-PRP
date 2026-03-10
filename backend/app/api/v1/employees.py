@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.api.v1.dependencies import get_db, get_current_active_user
@@ -95,6 +95,7 @@ async def get_employee(
 @router.post("", response_model=EmployeeSummary)
 async def create_employee(
     data: EmployeeFullCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -102,7 +103,12 @@ async def create_employee(
         raise HTTPException(status_code=403, detail="Only admins can add employees")
         
     service = EmployeeService(db)
-    emp = await service.create_employee(current_user.tenant_id, data)
+    emp = await service.create_employee(
+        tenant_id=current_user.tenant_id, 
+        data=data, 
+        user_id=current_user.id,
+        ip_address=req.client.host if req.client else None
+    )
     
     return EmployeeSummary(
         id=emp.id,
@@ -119,6 +125,7 @@ async def create_employee(
 async def update_employee(
     employment_id: uuid.UUID,
     data: EmployeeFullUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -126,7 +133,12 @@ async def update_employee(
         raise HTTPException(status_code=403, detail="Only admins can edit employees")
 
     service = EmployeeService(db)
-    detail = await service.update_employee(employment_id, data)
+    detail = await service.update_employee(
+        employment_id=employment_id, 
+        data=data,
+        user_id=current_user.id,
+        ip_address=req.client.host if req.client else None
+    )
     if not detail:
         raise HTTPException(status_code=404, detail="Employee not found")
     return detail
@@ -134,6 +146,7 @@ async def update_employee(
 @router.delete("/{employment_id}")
 async def deactivate_employee(
     employment_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -141,7 +154,11 @@ async def deactivate_employee(
         raise HTTPException(status_code=403, detail="Only admins can deactivate employees")
 
     service = EmployeeService(db)
-    success = await service.deactivate_employee(employment_id)
+    success = await service.deactivate_employee(
+        employment_id=employment_id,
+        user_id=current_user.id,
+        ip_address=req.client.host if req.client else None
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Employee not found")
     return {"message": "Employee deactivated successfully"}

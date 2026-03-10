@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.attendance import AttendanceRecord, DailyAttendance, Shift, ShiftRoster, ShiftBreak, PublicHoliday
 from app.models.employment import Employment
 from app.models.tenant import Entity
+from app.services.audit import AuditService
 from app.schemas.attendance import (
     ShiftCreate, ShiftUpdate, RosterBulkUpdate, ShiftBreakCreate,
     AttendanceRecordCreate, AttendanceRecordUpdate
@@ -18,7 +19,7 @@ class AttendanceService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def punch(self, entity_id: uuid.UUID, employment_id: uuid.UUID, punch_type: str, timestamp: datetime, source: str = "web"):
+    async def punch(self, entity_id: uuid.UUID, employment_id: uuid.UUID, punch_type: str, timestamp: datetime, source: str = "web", ip_address: str = None):
         """
         Records a punch in or punch out event.
         """
@@ -56,6 +57,28 @@ class AttendanceService:
                 record.clock_out = timestamp
         
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_emp = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == employment_id)
+        tenant_id = (await self.db.execute(stmt_emp)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT" if punch_type == "in" and not record.clock_out else "UPDATE",
+            table_name="attendance_records",
+            record_id=record.id,
+            new_value={
+                "punch_type": punch_type,
+                "timestamp": timestamp.isoformat(),
+                "source": source
+            },
+            user_id=None,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return record
 
     async def get_attendance_records(
@@ -107,31 +130,103 @@ class AttendanceService:
             
         return records
 
-    async def create_manual_punch(self, data: AttendanceRecordCreate) -> AttendanceRecord:
+    async def create_manual_punch(self, data: AttendanceRecordCreate, user_id: uuid.UUID = None, ip_address: str = None) -> AttendanceRecord:
         record = AttendanceRecord(**data.model_dump())
         self.db.add(record)
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_emp = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == record.employment_id)
+        tenant_id = (await self.db.execute(stmt_emp)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT",
+            table_name="attendance_records",
+            record_id=record.id,
+            new_value=data.model_dump(mode="json"),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return record
 
-    async def update_attendance_record(self, record_id: uuid.UUID, data: AttendanceRecordUpdate) -> Optional[AttendanceRecord]:
+    async def update_attendance_record(self, record_id: uuid.UUID, data: AttendanceRecordUpdate, user_id: uuid.UUID = None, ip_address: str = None) -> Optional[AttendanceRecord]:
         stmt = select(AttendanceRecord).where(AttendanceRecord.id == record_id)
         result = await self.db.execute(stmt)
         record = result.scalar_one_or_none()
         
         if not record:
             return None
+        
+        old_value = {
+            "clock_in": record.clock_in.isoformat() if record.clock_in else None,
+            "clock_out": record.clock_out.isoformat() if record.clock_out else None,
+            "is_approved": record.is_approved
+        }
             
         update_data = data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(record, key, value)
             
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_emp = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == record.employment_id)
+        tenant_id = (await self.db.execute(stmt_emp)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="attendance_records",
+            record_id=record.id,
+            old_value=old_value,
+            new_value=data.model_dump(mode="json", exclude_unset=True),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return record
 
-    async def delete_attendance_record(self, record_id: uuid.UUID) -> bool:
-        stmt = delete(AttendanceRecord).where(AttendanceRecord.id == record_id)
+    async def delete_attendance_record(self, record_id: uuid.UUID, user_id: uuid.UUID = None, ip_address: str = None) -> bool:
+        stmt = select(AttendanceRecord).where(AttendanceRecord.id == record_id)
         result = await self.db.execute(stmt)
-        return result.rowcount > 0
+        record = result.scalar_one_or_none()
+        
+        if not record:
+            return False
+            
+        from app.services.audit import to_dict
+        old_value = to_dict(record)
+        
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_emp = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == record.employment_id)
+        tenant_id = (await self.db.execute(stmt_emp)).scalar()
+
+        await self.db.delete(record)
+        await self.db.flush()
+        deleted = True
+
+        if deleted:
+            # Audit Log
+            await AuditService.log_action(
+                db=self.db,
+                action="DELETE",
+                table_name="attendance_records",
+                record_id=record_id,
+                old_value=old_value,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                ip_address=ip_address
+            )
+        return deleted
 
     async def preview_timesheet_data(self, entity_id: uuid.UUID, file_content: bytes, filename: str) -> dict:
         import pandas as pd
@@ -403,6 +498,21 @@ class AttendanceService:
 
         await self.db.flush()
         
+        # Audit Log
+        # Get tenant_id from Entity
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == entity_id)
+        tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="attendance_records",
+            record_id=entity_id, # Link to entity for bulk op
+            new_value={"import_count": success_count, "error_count": len(errors)},
+            user_id=None, # System/Internal for now if not passed
+            tenant_id=tenant_id
+        )
+
         return {
             "success_count": success_count,
             "error_count": len(errors),
@@ -410,11 +520,28 @@ class AttendanceService:
         }
     # --- Shift Management ---
 
-    async def create_shift(self, shift_in: "ShiftCreate") -> Shift:
+    async def create_shift(self, shift_in: "ShiftCreate", user_id: uuid.UUID = None, ip_address: str = None) -> Shift:
         shift = Shift(**shift_in.model_dump())
         self.db.add(shift)
         await self.db.flush()
         await self.db.refresh(shift, ["breaks"])
+
+        # Audit Log
+        # Get tenant_id from Entity
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == shift.entity_id)
+        tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT",
+            table_name="shifts",
+            record_id=shift.id,
+            new_value=shift_in.model_dump(mode="json"),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return shift
 
     async def get_shifts(self, entity_id: uuid.UUID) -> List[Shift]:
@@ -437,7 +564,7 @@ class AttendanceService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update_shift(self, shift_id: uuid.UUID, shift_update: "ShiftUpdate") -> Shift:
+    async def update_shift(self, shift_id: uuid.UUID, shift_update: "ShiftUpdate", user_id: uuid.UUID = None, ip_address: str = None) -> Shift:
         shift = await self.get_shift(shift_id)
         if not shift:
             raise ValueError("Shift not found")
@@ -448,15 +575,51 @@ class AttendanceService:
         
         await self.db.flush()
         await self.db.refresh(shift, ["breaks"])
+
+        # Audit Log
+        # Get tenant_id from Entity
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == shift.entity_id)
+        tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="shifts",
+            record_id=shift.id,
+            new_value=shift_update.model_dump(mode="json", exclude_unset=True),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return shift
 
-    async def delete_shift(self, shift_id: uuid.UUID) -> None:
+    async def delete_shift(self, shift_id: uuid.UUID, user_id: uuid.UUID = None, ip_address: str = None) -> None:
         stmt = select(Shift).where(Shift.id == shift_id)
         result = await self.db.execute(stmt)
         shift = result.scalar_one_or_none()
         if shift:
+            from app.services.audit import to_dict
+            old_value = to_dict(shift)
+            
+            # Get tenant_id from Entity
+            stmt_ent = select(Entity.tenant_id).where(Entity.id == shift.entity_id)
+            tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
             shift.is_deleted = True
             await self.db.flush()
+
+            # Audit Log
+            await AuditService.log_action(
+                db=self.db,
+                action="DELETE",
+                table_name="shifts",
+                record_id=shift_id,
+                old_value=old_value,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                ip_address=ip_address
+            )
 
     # --- Shift Break Management ---
 
@@ -465,7 +628,7 @@ class AttendanceService:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def replace_shift_breaks(self, shift_id: uuid.UUID, breaks_in: List[ShiftBreakCreate]) -> List[ShiftBreak]:
+    async def replace_shift_breaks(self, shift_id: uuid.UUID, breaks_in: List[ShiftBreakCreate], user_id: uuid.UUID = None, ip_address: str = None) -> List[ShiftBreak]:
         """Delete all existing breaks for a shift and replace with new ones."""
         await self.db.execute(delete(ShiftBreak).where(ShiftBreak.shift_id == shift_id))
         new_breaks = []
@@ -481,6 +644,18 @@ class AttendanceService:
             self.db.add(brk)
             new_breaks.append(brk)
         await self.db.flush()
+
+        # Audit Log
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="shifts",
+            record_id=shift_id,
+            new_value={"breaks": [b.model_dump(mode="json") for b in breaks_in]},
+            user_id=user_id,
+            ip_address=ip_address
+        )
+
         return new_breaks
 
     async def delete_shift_break(self, break_id: uuid.UUID) -> None:
@@ -507,7 +682,7 @@ class AttendanceService:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def assign_roster_bulk(self, bulk_data: RosterBulkUpdate) -> List[ShiftRoster]:
+    async def assign_roster_bulk(self, bulk_data: RosterBulkUpdate, user_id: uuid.UUID = None, ip_address: str = None) -> List[ShiftRoster]:
         """
         Assigns shifts to multiple employees for a date range.
         Deletes existing roster entries for the same period first.
@@ -540,6 +715,22 @@ class AttendanceService:
                 new_rosters.append(roster)
         
         await self.db.flush()
+
+        # Audit Log
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == bulk_data.entity_id)
+        tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="shift_rosters",
+            record_id=bulk_data.entity_id,
+            new_value={"bulk_assign": True, "count": len(new_rosters)},
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return new_rosters
 
     WEEKDAY_MAP = {
@@ -547,7 +738,7 @@ class AttendanceService:
         "friday": 4, "saturday": 5, "sunday": 6
     }
 
-    async def auto_generate_roster(self, data) -> List[ShiftRoster]:
+    async def auto_generate_roster(self, data, user_id: uuid.UUID = None, ip_address: str = None) -> List[ShiftRoster]:
         """
         Smart roster generation using Employment.rest_day, working_days_per_week,
         and public holidays.
@@ -612,12 +803,34 @@ class AttendanceService:
                 new_rosters.append(roster)
 
         await self.db.flush()
+
+        # Audit Log
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == data.entity_id)
+        tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="shift_rosters",
+            record_id=data.entity_id,
+            new_value={"auto_generate": True, "count": len(new_rosters)},
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return new_rosters
 
-    async def update_roster_cell(self, roster_id: uuid.UUID, shift_id=None, day_type=None) -> Optional[ShiftRoster]:
+    async def update_roster_cell(self, roster_id: uuid.UUID, shift_id=None, day_type=None, user_id: uuid.UUID = None, ip_address: str = None) -> Optional[ShiftRoster]:
         roster = await self.db.get(ShiftRoster, roster_id)
         if not roster:
             return None
+        
+        old_value = {
+            "shift_id": str(roster.shift_id) if roster.shift_id else None,
+            "day_type": roster.day_type
+        }
+
         if shift_id is not None:
             roster.shift_id = shift_id
         if day_type is not None:
@@ -626,6 +839,28 @@ class AttendanceService:
             if day_type in ("rest_day", "off_day", "public_holiday"):
                 roster.shift_id = None
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_emp = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == roster.employment_id)
+        tenant_id = (await self.db.execute(stmt_emp)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="shift_rosters",
+            record_id=roster_id,
+            old_value=old_value,
+            new_value={
+                "shift_id": str(roster.shift_id) if roster.shift_id else None,
+                "day_type": roster.day_type
+            },
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return roster
 
     async def delete_roster_cell(self, roster_id: uuid.UUID) -> bool:
@@ -648,7 +883,23 @@ class AttendanceService:
         )
         result = await self.db.execute(stmt)
         await self.db.flush()
-        return result.rowcount
+        deleted_count = result.rowcount
+
+        # Audit Log
+        stmt_ent = select(Entity.tenant_id).where(Entity.id == data.entity_id)
+        tenant_id = (await self.db.execute(stmt_ent)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="DELETE",
+            table_name="shift_rosters",
+            record_id=data.entity_id,
+            new_value={"bulk_clear": True, "count": deleted_count},
+            user_id=None,
+            tenant_id=tenant_id
+        )
+
+        return deleted_count
 
     async def get_roster_enriched(self, entity_id: uuid.UUID, start_date: date, end_date: date, employment_id: Optional[uuid.UUID] = None):
         """Fetch roster with employee name and shift name."""

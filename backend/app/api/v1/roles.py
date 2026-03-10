@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.auth import User, Role, RolePermission
 from app.schemas.roles import RoleRead, RoleCreate, RoleUpdate
 from app.api.v1.dependencies import require_tenant_admin
+from app.services.audit import AuditService
 
 router = APIRouter(prefix="/roles", tags=["Roles"])
 
@@ -42,6 +43,7 @@ async def list_roles(
 @router.post("", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
 async def create_role(
     role_in: RoleCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_tenant_admin)
 ):
@@ -56,6 +58,18 @@ async def create_role(
     db.add(db_role)
     await db.commit()
     await db.refresh(db_role)
+    
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="INSERT",
+        table_name="roles",
+        record_id=db_role.id,
+        new_value=role_in.model_dump(mode="json"),
+        user_id=current_admin.id,
+        tenant_id=current_admin.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
     
     for perm in role_in.permissions:
         db_perm = RolePermission(role_id=db_role.id, permission=perm)
@@ -72,6 +86,7 @@ async def create_role(
 async def update_role(
     role_id: uuid.UUID,
     role_in: RoleUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_tenant_admin)
 ):
@@ -85,12 +100,28 @@ async def update_role(
     if not db_role:
         raise HTTPException(status_code=404, detail="Role not found")
         
+    from app.services.audit import to_dict
+    old_val = to_dict(db_role)
+        
     if role_in.name is not None:
         db_role.name = role_in.name
     if role_in.description is not None:
         db_role.description = role_in.description
         
     await db.commit()
+    
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="roles",
+        record_id=role_id,
+        old_value=old_val,
+        new_value=role_in.model_dump(mode="json", exclude_unset=True),
+        user_id=current_admin.id,
+        tenant_id=current_admin.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
     
     if role_in.permissions is not None:
         # Delete old
@@ -117,6 +148,7 @@ async def update_role(
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_role(
     role_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(require_tenant_admin)
 ):
@@ -130,6 +162,21 @@ async def delete_role(
     if not db_role:
         raise HTTPException(status_code=404, detail="Role not found")
         
+    from app.services.audit import to_dict
+    old_val = to_dict(db_role)
+        
     # Assume cascade delete on RolePermission
     await db.delete(db_role)
     await db.commit()
+
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="DELETE",
+        table_name="roles",
+        old_value=old_val,
+        record_id=role_id,
+        user_id=current_admin.id,
+        tenant_id=current_admin.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )

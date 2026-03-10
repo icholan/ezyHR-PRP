@@ -14,6 +14,7 @@ from app.services.leave import LeaveService
 import uuid
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
+from app.services.audit import AuditService
 
 
 class EmployeeService:
@@ -51,7 +52,7 @@ class EmployeeService:
         result = await self.db.execute(query)
         return result.scalar() is not None
 
-    async def create_employee(self, tenant_id: uuid.UUID, data: EmployeeFullCreate) -> Employment:
+    async def create_employee(self, tenant_id: uuid.UUID, data: EmployeeFullCreate, user_id: uuid.UUID = None, ip_address: str = None) -> Employment:
         # 1. Handle Person
         if data.person_id:
             person_result = await self.db.execute(select(Person).where(Person.id == data.person_id))
@@ -126,6 +127,19 @@ class EmployeeService:
         # 4. Grant Initial Leave Entitlements (Phase 2A)
         leave_service = LeaveService(self.db)
         await leave_service.grant_initial_entitlements(employment.id)
+
+        # Log action
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT",
+            table_name="employments",
+            record_id=employment.id,
+            new_value=data.model_dump(mode='json'),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            entity_id=employment.entity_id,
+            ip_address=ip_address
+        )
 
         await self.db.commit()
         await self.db.refresh(employment)
@@ -289,15 +303,25 @@ class EmployeeService:
             salary_components=salary_components
         )
 
-    async def update_employee(self, employment_id: uuid.UUID, data: EmployeeFullUpdate) -> Optional[EmployeeDetail]:
+    async def update_employee(self, employment_id: uuid.UUID, data: EmployeeFullUpdate, user_id: uuid.UUID = None, ip_address: str = None) -> Optional[EmployeeDetail]:
         """Update person and/or employment fields."""
-        # Fetch employment to get person_id
-        emp_result = await self.db.execute(
-            select(Employment).where(Employment.id == employment_id)
+        # Fetch employment with person to get tenant_id and full state
+        query = (
+            select(Employment, Person)
+            .join(Person, Employment.person_id == Person.id)
+            .where(Employment.id == employment_id)
         )
-        employment = emp_result.scalar_one_or_none()
-        if not employment:
+        res = await self.db.execute(query)
+        row = res.first()
+        if not row:
             return None
+        employment, person = row
+        
+        from app.services.audit import to_dict
+        old_value_emp = to_dict(employment)
+        old_value_person = to_dict(person)
+        old_value = {"employment": old_value_emp, "person": old_value_person}
+        tenant_id = person.tenant_id
 
         # Update Person fields
         if data.person:
@@ -319,6 +343,20 @@ class EmployeeService:
                 await self.db.execute(
                     update(Employment).where(Employment.id == employment_id).values(**emp_updates)
                 )
+
+        # Log action
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="employments",
+            record_id=employment_id,
+            old_value=old_value,
+            new_value=data.model_dump(mode='json', exclude_unset=True),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            entity_id=employment.entity_id,
+            ip_address=ip_address
+        )
 
         # Update Salary Components
         if data.salary_components is not None:
@@ -356,17 +394,42 @@ class EmployeeService:
         # Return updated detail
         return await self.get_employee_detail(employment_id)
 
-    async def deactivate_employee(self, employment_id: uuid.UUID) -> bool:
+    async def deactivate_employee(self, employment_id: uuid.UUID, user_id: uuid.UUID = None, ip_address: str = None) -> bool:
         """Soft delete: set is_active=False and resign_date=today."""
-        result = await self.db.execute(
-            select(Employment).where(Employment.id == employment_id)
+        # Fetch employment with person to get tenant_id
+        query = (
+            select(Employment, Person)
+            .join(Person, Employment.person_id == Person.id)
+            .where(Employment.id == employment_id)
         )
-        employment = result.scalar_one_or_none()
-        if not employment:
+        res = await self.db.execute(query)
+        row = res.first()
+        if not row:
             return False
+            
+        employment, person = row
+        
+        from app.services.audit import to_dict
+        old_value = to_dict(employment)
+        tenant_id = person.tenant_id
 
         employment.is_active = False
         employment.resign_date = date.today()
+
+        # Log action
+        await AuditService.log_action(
+            db=self.db,
+            action="DELETE",
+            table_name="employments",
+            record_id=employment_id,
+            old_value=old_value,
+            new_value={"is_active": False, "resign_date": str(employment.resign_date)},
+            user_id=user_id,
+            tenant_id=tenant_id,
+            entity_id=employment.entity_id,
+            ip_address=ip_address
+        )
+
         await self.db.commit()
         return True
     async def get_tenant_persons(self, tenant_id: uuid.UUID) -> List[PersonRead]:

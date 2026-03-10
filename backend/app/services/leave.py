@@ -26,6 +26,7 @@ from app.models.leave import (
 from app.models.employment import Employment, Person
 from app.schemas.leave import LeaveRequestCreate
 from app.services.attendance import AttendanceService
+from app.services.audit import AuditService
 
 
 class LeaveService:
@@ -406,7 +407,7 @@ class LeaveService:
                 f"Used to date: {used_to_date:.1f}, Remaining: {remaining:.1f} days."
             )
 
-    async def apply_leave(self, req_data: LeaveRequestCreate):
+    async def apply_leave(self, req_data: LeaveRequestCreate, user_id: uuid.UUID = None, ip_address: str = None):
         """
         Processes a leave application with full DB-driven entitlement validation.
 
@@ -528,6 +529,24 @@ class LeaveService:
             entitlement.pending_days = float(entitlement.pending_days) + days
 
         await self.db.flush()
+
+        # ── 11. Audit Log ──
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_ten = select(Person.tenant_id).where(Person.id == emp.person_id)
+        tenant_id = (await self.db.execute(stmt_ten)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT",
+            table_name="leave_requests",
+            record_id=new_req.id,
+            new_value=req_data.model_dump(mode="json"),
+            user_id=user_id,
+            ip_address=ip_address,
+            tenant_id=tenant_id
+        )
+
         return new_req, conflicts
 
     async def grant_initial_entitlements(self, employment_id: uuid.UUID) -> List[LeaveEntitlement]:
@@ -890,15 +909,21 @@ class LeaveService:
         request_id: uuid.UUID,
         status: str,
         admin_user_id: uuid.UUID,
-        rejection_reason: Optional[str] = None
+        rejection_reason: Optional[str] = None,
+        ip_address: Optional[str] = None
     ):
         """
         Updates status of a leave request (pending → approved/rejected/cancelled).
         Adjusts entitlement ledger accordingly.
         """
-        stmt = select(LeaveRequest).where(LeaveRequest.id == request_id)
+        stmt = select(LeaveRequest).join(Employment).where(LeaveRequest.id == request_id)
         res = await self.db.execute(stmt)
         request = res.scalar_one_or_none()
+        
+        # We need the employment for tenant_id anyway
+        stmt_emp = select(Employment).where(Employment.id == (request.employment_id if request else None))
+        emp_res = await self.db.execute(stmt_emp)
+        emp = emp_res.scalar_one_or_none()
 
         if not request:
             raise ValueError("Leave request not found.")
@@ -906,6 +931,13 @@ class LeaveService:
             return request
 
         old_status = request.status
+        old_value = {
+            "status": old_status,
+            "rejection_reason": request.rejection_reason,
+            "approved_by": str(request.approved_by) if request.approved_by else None,
+            "approved_at": request.approved_at.isoformat() if request.approved_at else None
+        }
+
         request.status = status
         request.approved_by = admin_user_id
         request.approved_at = datetime.now()
@@ -937,6 +969,30 @@ class LeaveService:
                 entitlement.used_days = float(entitlement.used_days) + float(request.days_count)
 
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_ten = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == request.employment_id)
+        tenant_id = (await self.db.execute(stmt_ten)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="leave_requests",
+            record_id=request.id,
+            old_value=old_value,
+            new_value={
+                "status": status,
+                "rejection_reason": rejection_reason,
+                "approved_by": str(admin_user_id),
+                "approved_at": request.approved_at.isoformat()
+            },
+            user_id=admin_user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return request
 
     # ─────────────────────────────────────────────
@@ -1069,7 +1125,9 @@ class LeaveService:
         self,
         entitlement_id: uuid.UUID,
         total_days: Optional[float] = None,
-        carried_over_days: Optional[float] = None
+        carried_over_days: Optional[float] = None,
+        user_id: Optional[uuid.UUID] = None,
+        ip_address: Optional[str] = None
     ) -> LeaveEntitlement:
         """Manually updates an entitlement record's days."""
         stmt = select(LeaveEntitlement).where(LeaveEntitlement.id == entitlement_id)
@@ -1078,6 +1136,11 @@ class LeaveService:
         
         if not ent:
             raise ValueError("Entitlement record not found.")
+
+        old_value = {
+            "total_days": float(ent.total_days),
+            "carried_over_days": float(ent.carried_over_days)
+        }
 
         if total_days is not None:
             # Enforce Statutory Minimums (Admin Override only allows >= statutory)
@@ -1106,6 +1169,28 @@ class LeaveService:
             ent.carried_over_days = carried_over_days
 
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_ten = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == ent.employment_id)
+        tenant_id = (await self.db.execute(stmt_ten)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="UPDATE",
+            table_name="leave_entitlements",
+            record_id=ent.id,
+            old_value=old_value,
+            new_value={
+                "total_days": float(ent.total_days),
+                "carried_over_days": float(ent.carried_over_days)
+            },
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
+
         return ent
 
 
@@ -1115,7 +1200,9 @@ class LeaveService:
         leave_type_id: uuid.UUID,
         year: int,
         total_days: float,
-        carried_over_days: float = 0.0
+        carried_over_days: float = 0.0,
+        user_id: Optional[uuid.UUID] = None,
+        ip_address: Optional[str] = None
     ) -> LeaveEntitlement:
         """Manually creates a new entitlement record."""
         # Check if already exists
@@ -1160,6 +1247,29 @@ class LeaveService:
         )
         self.db.add(new_ent)
         await self.db.flush()
+
+        # Audit Log
+        # Get tenant_id from Employment via Person
+        from app.models.employment import Person
+        stmt_ten = select(Person.tenant_id).join(Employment, Employment.person_id == Person.id).where(Employment.id == employment_id)
+        tenant_id = (await self.db.execute(stmt_ten)).scalar()
+
+        await AuditService.log_action(
+            db=self.db,
+            action="INSERT",
+            table_name="leave_entitlements",
+            record_id=new_ent.id,
+            new_value={
+                "employment_id": str(employment_id),
+                "leave_type_id": str(leave_type_id),
+                "year": year,
+                "total_days": total_days,
+                "carried_over_days": carried_over_days
+            },
+            user_id=user_id,
+            tenant_id=tenant_id,
+            ip_address=ip_address
+        )
 
         return new_ent
 

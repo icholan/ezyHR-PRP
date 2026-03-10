@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
@@ -15,6 +15,7 @@ from app.schemas.payroll import (
 from app.services.payroll import payroll_service
 from app.services.reporting import ReportingService
 from app.services.ai_audit import ai_audit_service
+from app.services.audit import AuditService
 from fastapi.responses import Response
 import uuid
 
@@ -39,6 +40,7 @@ async def list_payroll_runs(
 @router.post("/runs", response_model=PayrollRunResponse)
 async def create_payroll_run(
     request: PayrollRunCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -77,6 +79,20 @@ async def create_payroll_run(
     )
     
     db.add(new_run)
+    await db.flush() # Get ID
+    
+    # Audit Log
+    await AuditService.log_action(
+        db=db,
+        action="INSERT",
+        table_name="payroll_runs",
+        record_id=new_run.id,
+        new_value=request.model_dump(mode="json"),
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
+
     await db.commit()
     await db.refresh(new_run)
     
@@ -85,6 +101,7 @@ async def create_payroll_run(
 @router.post("/runs/{run_id}/process")
 async def process_payroll_run(
     run_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -99,7 +116,7 @@ async def process_payroll_run(
         
     await get_entity_access(run.entity_id, user, db)
     
-    count = await payroll_service.process_entity_payroll(db, run_id)
+    count = await payroll_service.process_entity_payroll(db, run_id, user_id=user.id, ip_address=req.client.host if req.client else None)
     return {"message": f"Processed {count} records successfully"}
 
 @router.post("/runs/{run_id}/audit")
@@ -173,6 +190,7 @@ async def get_payroll_run(
 @router.delete("/runs/{run_id}")
 async def delete_payroll_run(
     run_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -190,7 +208,7 @@ async def delete_payroll_run(
     if role != "hr_admin":
         raise HTTPException(status_code=403, detail="Only HR Admins can delete runs")
 
-    await payroll_service.delete_payroll_run(db, run_id)
+    await payroll_service.delete_payroll_run(db, run_id, user_id=user.id, ip_address=req.client.host if req.client else None)
     return {"message": "Payroll run deleted successfully"}
 
 @router.get("/records/{record_id}", response_model=PayrollRecordResponse)
@@ -243,6 +261,7 @@ from app.models.system import AuditLog
 @router.post("/runs/{run_id}/approve")
 async def approve_payroll_run(
     run_id: uuid.UUID,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -266,22 +285,29 @@ async def approve_payroll_run(
 
     # TODO: Check if AI Audit is clean
     
+    from app.services.audit import to_dict
+    old_value = to_dict(run)
+    
     run.status = "approved"
     run.approved_by = user.id
     run.approved_at = datetime.utcnow()
     
     # Audit Logging
-    audit = AuditLog(
-        tenant_id=user.tenant_id,
-        user_id=user.id,
-        entity_id=run.entity_id,
+    from app.models.tenant import Entity
+    stmt_ent = select(Entity.tenant_id).where(Entity.id == run.entity_id)
+    tenant_id = (await db.execute(stmt_ent)).scalar()
+
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
         table_name="payroll_runs",
         record_id=run.id,
-        action="UPDATE",
-        old_value={"status": "draft"},
-        new_value={"status": "approved"}
+        old_value=old_value,
+        new_value={"status": "approved", "approved_by": str(user.id)},
+        user_id=user.id,
+        tenant_id=tenant_id,
+        ip_address=req.client.host if req.client else None
     )
-    db.add(audit)
     
     await db.commit()
     return {"status": "approved"}
@@ -311,6 +337,7 @@ async def get_person_ytd(
 async def update_person_ytd(
     person_id: uuid.UUID,
     payload: PersonCPFSummaryUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -327,6 +354,9 @@ async def update_person_ytd(
     )
     summary = (await db.execute(stmt)).scalar_one_or_none()
     
+    from app.services.audit import to_dict
+    old_value = to_dict(summary) if summary.id else None # summary might be new
+
     if not summary:
         summary = PersonCPFSummary(person_id=person_id, **payload.model_dump())
         db.add(summary)
@@ -336,6 +366,25 @@ async def update_person_ytd(
             
     await db.commit()
     await db.refresh(summary)
+
+    # Audit Log
+    # Get tenant_id from Person's Employment
+    from app.models.employment import Employment
+    stmt_emp = select(Employment.tenant_id).where(Employment.person_id == person_id)
+    tenant_id = (await db.execute(stmt_emp)).scalar()
+
+    await AuditService.log_action(
+        db=db,
+        action="UPDATE",
+        table_name="person_cpf_summaries",
+        record_id=summary.id,
+        old_value=old_value,
+        new_value=payload.model_dump(mode="json"),
+        user_id=user.id,
+        tenant_id=tenant_id,
+        ip_address=req.client.host if req.client else None
+    )
+
     return summary
 
 # --- Statutory Exports ---
