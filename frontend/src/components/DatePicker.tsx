@@ -14,6 +14,7 @@ interface DatePickerProps {
     className?: string;
     inputClassName?: string;
     align?: 'left' | 'right';              // Dropdown alignment
+    disabled?: boolean;
 }
 
 const MONTHS = [
@@ -39,6 +40,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
     className,
     inputClassName,
     align = 'left',
+    disabled = false,
 }) => {
     const [open, setOpen] = useState(false);
     const [viewMode, setViewMode] = useState<ViewMode>('days');
@@ -346,9 +348,10 @@ const DatePicker: React.FC<DatePickerProps> = ({
                         ? 'border-purple-500 ring-4 ring-purple-500/10 bg-white dark:bg-gray-900'
                         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm',
                     error && 'border-rose-400',
+                    disabled && 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800',
                     inputClassName,
                 )}
-                onClick={() => { setOpen(o => !o); setViewMode('days'); }}
+                onClick={() => { if (!disabled) { setOpen(o => !o); setViewMode('days'); } }}
             >
                 <IconComp className="absolute left-4 w-5 h-5 text-gray-400 dark:text-gray-500" />
                 <span className={clsx('text-sm', !displayValue && 'text-gray-400 dark:text-gray-500', displayValue && 'font-semibold text-dark-900 dark:text-gray-100')}>

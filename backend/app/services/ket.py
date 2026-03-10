@@ -13,22 +13,25 @@ class KETService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_ket_dashboard(self, tenant_id: uuid.UUID) -> KETDashboardResponse:
+    async def get_ket_dashboard(self, tenant_id: uuid.UUID, entity_id: Optional[uuid.UUID] = None) -> KETDashboardResponse:
         """Fetch all employees and their latest KET status."""
         # Get all active employments for this tenant
         # We join with Person for names and KeyEmploymentTerm for status
         # Since an employee might have multiple KET versions, we need the latest one
         
         # Subquery for latest KET version per employment
-        latest_ket_sub = (
+        latest_ket_query = (
             select(
                 KeyEmploymentTerm.employment_id,
                 func.max(KeyEmploymentTerm.version).label("max_version")
             )
             .where(KeyEmploymentTerm.tenant_id == tenant_id)
-            .group_by(KeyEmploymentTerm.employment_id)
-            .subquery()
         )
+        
+        if entity_id:
+            latest_ket_query = latest_ket_query.join(Employment, KeyEmploymentTerm.employment_id == Employment.id).where(Employment.entity_id == entity_id)
+
+        latest_ket_sub = latest_ket_query.group_by(KeyEmploymentTerm.employment_id).subquery()
 
         query = (
             select(
@@ -49,8 +52,12 @@ class KETService:
                 (KeyEmploymentTerm.version == latest_ket_sub.c.max_version)
             )
             .where(Employment.is_active == True)
-            .where(Person.tenant_id == tenant_id)
         )
+        
+        if entity_id:
+            query = query.where(Employment.entity_id == entity_id)
+        
+        query = query.where(Person.tenant_id == tenant_id)
 
         result = await self.db.execute(query)
         rows = result.all()

@@ -985,19 +985,19 @@ const EmployeeProfile = () => {
                                                 </div>
                                                 <h3 className="font-bold text-dark-950 dark:text-gray-50">{bal.leave_type_name}</h3>
                                             </div>
-                                            <span className="text-2xl font-black text-primary-600 dark:text-primary-400">{bal.balance}</span>
+                                            <span className="text-2xl font-black text-primary-600 dark:text-primary-400">{bal.available_days}</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-y-2 text-sm mt-auto">
                                             <div className="text-gray-500 dark:text-gray-400">Allocated</div>
-                                            <div className="text-right font-medium text-dark-950 dark:text-gray-100">{bal.allocated}</div>
-                                            {bal.carry_forward > 0 && (
+                                            <div className="text-right font-medium text-dark-950 dark:text-gray-100">{bal.total_days}</div>
+                                            {bal.carried_over_days > 0 && (
                                                 <>
                                                     <div className="text-gray-500 dark:text-gray-400">Carry Forward</div>
-                                                    <div className="text-right font-medium text-dark-950 dark:text-gray-100">{bal.carry_forward}</div>
+                                                    <div className="text-right font-medium text-dark-950 dark:text-gray-100">{bal.carried_over_days}</div>
                                                 </>
                                             )}
                                             <div className="text-gray-500 dark:text-gray-400">Consumed</div>
-                                            <div className="text-right font-medium text-rose-600 dark:text-rose-400">{bal.consumed}</div>
+                                            <div className="text-right font-medium text-rose-600 dark:text-rose-400">{bal.used_days}</div>
                                         </div>
                                     </div>
                                 ))}

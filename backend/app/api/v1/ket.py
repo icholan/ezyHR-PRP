@@ -11,11 +11,12 @@ router = APIRouter(prefix="/ket", tags=["KET"], redirect_slashes=False)
 
 @router.get("/dashboard", response_model=KETDashboardResponse)
 async def get_ket_dashboard(
+    entity_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     service = KETService(db)
-    return await service.get_ket_dashboard(current_user.tenant_id)
+    return await service.get_ket_dashboard(current_user.tenant_id, entity_id=entity_id)
 
 @router.post("/generate", response_model=KETRead)
 async def generate_ket_snapshot(

@@ -138,3 +138,4 @@ Interactive Payslips: A professional UI for employees to see their OA/SA/MA brea
 AI Audit Panel: Enhancing the "Process" flow so that HR Admins see an "Audit" report (Salary anomalies, compliance risks) before they "Approve & Lock" the payroll.
 
 Does this "Generation & Compliance" roadmap look correct to you? If so, I'll start with the YTD tracking infrastructure.
+

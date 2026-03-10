@@ -133,6 +133,281 @@ class AttendanceService:
         result = await self.db.execute(stmt)
         return result.rowcount > 0
 
+    async def preview_timesheet_data(self, entity_id: uuid.UUID, file_content: bytes, filename: str) -> dict:
+        import pandas as pd
+        import io
+        from app.models.employment import Employment, Person
+
+        try:
+            if filename.endswith('.csv'):
+                df = pd.read_csv(io.BytesIO(file_content))
+            else:
+                df = pd.read_excel(io.BytesIO(file_content))
+        except Exception as e:
+            raise ValueError(f"Failed to read file: {str(e)}")
+
+        df.columns = df.columns.astype(str).str.strip().str.lower()
+        col_mapping = {
+            "employee id": "employee_id",
+            "date": "date",
+            "clock in": "clock_in",
+            "clock out": "clock_out"
+        }
+        actual_cols = {}
+        for expected, internal in col_mapping.items():
+            for col in df.columns:
+                if col.startswith(expected):
+                    actual_cols[internal] = col
+                    break
+                    
+        if "employee_id" not in actual_cols or "date" not in actual_cols:
+            raise ValueError("CSV/Excel must contain at least 'Employee ID' and 'Date' columns.")
+
+        # Bulk fetch employments and names for this entity
+        stmt = (
+            select(Employment.id, Employment.employee_code, Person.full_name)
+            .join(Person, Employment.person_id == Person.id)
+            .where(
+                and_(
+                    Employment.entity_id == entity_id,
+                    Employment.is_active == True
+                )
+            )
+        )
+        employments = (await self.db.execute(stmt)).all()
+        emp_code_map = {str(emp.employee_code).strip().upper(): {"id": emp.id, "name": emp.full_name} for emp in employments if emp.employee_code}
+
+        preview_data = []
+        valid_rows = 0
+        invalid_rows = 0
+        
+        seen_file_records = set()
+
+        for index, row in df.iterrows():
+            row_idx = index + 2
+            emp_code = str(row.get(actual_cols["employee_id"], "")).strip().upper()
+            
+            # Skip completely empty rows
+            if pd.isna(emp_code) or not emp_code or emp_code == 'NAN':
+                continue
+
+            preview_row = {
+                "row_index": row_idx,
+                "employee_code": emp_code,
+                "employment_id": None,
+                "employee_name": None,
+                "work_date": None,
+                "clock_in": None,
+                "clock_out": None,
+                "is_valid": True,
+                "validation_errors": []
+            }
+
+            if emp_code not in emp_code_map:
+                preview_row["is_valid"] = False
+                preview_row["validation_errors"].append(f"Employee ID '{emp_code}' not found.")
+            else:
+                preview_row["employment_id"] = emp_code_map[emp_code]["id"]
+                preview_row["employee_name"] = emp_code_map[emp_code]["name"]
+
+            raw_date = row.get(actual_cols["date"])
+            if pd.isna(raw_date):
+                preview_row["is_valid"] = False
+                preview_row["validation_errors"].append("Missing Date.")
+            else:
+                try:
+                    work_date = pd.to_datetime(raw_date).date()
+                    preview_row["work_date"] = work_date
+                except:
+                    preview_row["is_valid"] = False
+                    preview_row["validation_errors"].append("Invalid Date format.")
+
+            if preview_row["work_date"]:
+                # --- Fuzzy Time Parser Helper ---
+                def parse_fuzzy_time(time_str: str) -> Optional[datetime]:
+                    if pd.isna(time_str) or not str(time_str).strip():
+                        return None
+                    
+                    time_str = str(time_str).strip().upper()
+                    
+                    # Already a datetime object from Excel
+                    if isinstance(time_str, datetime):
+                        return time_str
+                    
+                    # 1. Clean common noise
+                    time_str = time_str.replace("HRS", "").replace("HR", "").strip()
+                    
+                    # 2. Convert standard decimal formatting (e.g. 18.30 -> 18:30)
+                    import re
+                    if re.match(r'^\d{1,2}\.\d{2}(\s*[A-Z]{2})?$', time_str):
+                        time_str = time_str.replace('.', ':', 1)
+                        
+                    # 3. Handle Military Time without colon (e.g. 800 -> 08:00, 0900 -> 09:00, 1830 -> 18:30)
+                    if re.match(r'^\d{3,4}$', time_str):
+                        if len(time_str) == 3:
+                            time_str = f"0{time_str[0]}:{time_str[1:]}"
+                        else:
+                            time_str = f"{time_str[:2]}:{time_str[2:]}"
+                        
+                    # 4. Handle edge cases like "9" -> "09:00"
+                    if re.match(r'^\d{1,2}$', time_str):
+                        time_str = f"{time_str}:00"
+                        
+                    try:
+                        from dateutil import parser
+                        parsed = parser.parse(time_str)
+                        return parsed
+                    except:
+                        return None
+                # -------------------------------
+                
+                # Parse Times
+                if "clock_in" in actual_cols:
+                    raw_in = row.get(actual_cols["clock_in"])
+                    parsed_in = parse_fuzzy_time(raw_in)
+                    if parsed_in:
+                        if parsed_in.year == 1900 or parsed_in.year == datetime.now().year:
+                            # It only returned a time component
+                            preview_row["clock_in"] = datetime.combine(preview_row["work_date"], parsed_in.time(), tzinfo=SGT)
+                        else:
+                            preview_row["clock_in"] = parsed_in.replace(tzinfo=SGT) if parsed_in.tzinfo is None else parsed_in
+                    elif pd.notna(raw_in) and str(raw_in).strip():
+                        preview_row["is_valid"] = False
+                        preview_row["validation_errors"].append(f"Uncrecognized Clock In format: '{raw_in}'")
+
+                if "clock_out" in actual_cols:
+                    raw_out = row.get(actual_cols["clock_out"])
+                    parsed_out = parse_fuzzy_time(raw_out)
+                    if parsed_out:
+                        if parsed_out.year == 1900 or parsed_out.year == datetime.now().year:
+                            preview_row["clock_out"] = datetime.combine(preview_row["work_date"], parsed_out.time(), tzinfo=SGT)
+                        else:
+                            preview_row["clock_out"] = parsed_out.replace(tzinfo=SGT) if parsed_out.tzinfo is None else parsed_out
+                        
+                        # Handle overnight shifts intuitively in parser if out < in without date provided
+                        if preview_row["clock_in"] and preview_row["clock_out"] and preview_row["clock_out"] < preview_row["clock_in"]:
+                             # Only if the original parser only outputted a time (year 1900 fallback typical of dateutil)
+                             if parsed_out.year == 1900 or parsed_out.year == datetime.now().year:
+                                 preview_row["clock_out"] += timedelta(days=1)
+                                 
+                    elif pd.notna(raw_out) and str(raw_out).strip():
+                        preview_row["is_valid"] = False
+                        preview_row["validation_errors"].append(f"Uncrecognized Clock Out format: '{raw_out}'")
+
+                if not preview_row["clock_in"] and not preview_row["clock_out"]:
+                    preview_row["is_valid"] = False
+                    preview_row["validation_errors"].append("No valid Clock In or Out time.")
+
+            if preview_row["is_valid"] and preview_row["work_date"] and preview_row["employment_id"]:
+                record_key = (preview_row["employment_id"], preview_row["work_date"])
+                if record_key in seen_file_records:
+                    preview_row["is_valid"] = False
+                    preview_row["validation_errors"].append("Duplicate record in uploaded file for this date.")
+                else:
+                    seen_file_records.add(record_key)
+                    
+                    # Also check DB for existing record
+                    rec_stmt = select(AttendanceRecord).where(
+                        and_(
+                            AttendanceRecord.employment_id == preview_row["employment_id"],
+                            AttendanceRecord.work_date == preview_row["work_date"]
+                        )
+                    )
+                    existing_db = (await self.db.execute(rec_stmt)).scalar_one_or_none()
+                    if existing_db:
+                        preview_row["is_valid"] = False
+                        preview_row["validation_errors"].append("Timesheet for this date already exists in database.")
+
+            if preview_row["is_valid"]:
+                valid_rows += 1
+                
+                # Fetch OT Breakdowns
+                calculated = await self._calculate_attendance_hours(
+                    entity_id=entity_id,
+                    emp_id=preview_row["employment_id"],
+                    work_date=preview_row["work_date"],
+                    clock_in=preview_row["clock_in"],
+                    clock_out=preview_row["clock_out"]
+                )
+                preview_row["normal_hours"] = calculated["normal_hours"]
+                preview_row["ot_hours_1_5x"] = calculated["ot_hours_1_5x"]
+                preview_row["ot_hours_2x"] = calculated["ot_hours_2x"]
+                preview_row["lateness_mins"] = calculated.get("lateness_mins", 0)
+                preview_row["early_exit_mins"] = calculated.get("early_exit_mins", 0)
+                preview_row["calculation_breakdown"] = calculated.get("calculation_breakdown", [])
+                if "matched_shift_name" in calculated:
+                    preview_row["matched_shift_name"] = calculated["matched_shift_name"]
+                
+            else:
+                invalid_rows += 1
+                
+            preview_data.append(preview_row)
+
+        return {
+            "total_rows": len(preview_data),
+            "valid_rows": valid_rows,
+            "invalid_rows": invalid_rows,
+            "data": preview_data
+        }
+
+    async def confirm_timesheet_import(self, entity_id: uuid.UUID, records: List[dict]) -> dict:
+        success_count = 0
+        errors = []
+
+        for index, item in enumerate(records):
+            try:
+                emp_id = uuid.UUID(str(item["employment_id"]))
+                work_date_str = item["work_date"]
+                work_date = date.fromisoformat(work_date_str) if isinstance(work_date_str, str) else work_date_str
+                
+                # We need to handle tz-aware datetime from ISO string parsing
+                clock_in = None
+                if item.get("clock_in"):
+                    clock_in = datetime.fromisoformat(str(item["clock_in"]).replace('Z', '+00:00'))
+
+                clock_out = None
+                if item.get("clock_out"):
+                    clock_out = datetime.fromisoformat(str(item["clock_out"]).replace('Z', '+00:00'))
+
+            except Exception as e:
+                errors.append({"row": index + 1, "error": f"Payload parsing error: {str(e)}"})
+                continue
+
+            rec_stmt = select(AttendanceRecord).where(
+                and_(
+                    AttendanceRecord.employment_id == emp_id,
+                    AttendanceRecord.work_date == work_date
+                )
+            )
+            existing_record = (await self.db.execute(rec_stmt)).scalar_one_or_none()
+
+            try:
+                if existing_record:
+                    if clock_in: existing_record.clock_in = clock_in
+                    if clock_out: existing_record.clock_out = clock_out
+                    existing_record.source = "bulk_import"
+                else:
+                    new_record = AttendanceRecord(
+                        employment_id=emp_id,
+                        entity_id=entity_id,
+                        work_date=work_date,
+                        clock_in=clock_in,
+                        clock_out=clock_out,
+                        source="bulk_import"
+                    )
+                    self.db.add(new_record)
+                
+                success_count += 1
+            except Exception as e:
+                errors.append({"row": index + 1, "error": f"DB upsert error: {str(e)}"})
+
+        await self.db.flush()
+        
+        return {
+            "success_count": success_count,
+            "error_count": len(errors),
+            "errors": errors
+        }
     # --- Shift Management ---
 
     async def create_shift(self, shift_in: "ShiftCreate") -> Shift:
@@ -458,6 +733,171 @@ class AttendanceService:
         
         return best_match
 
+    async def _calculate_attendance_hours(self, entity_id: uuid.UUID, emp_id: uuid.UUID, work_date: date, clock_in: datetime | None, clock_out: datetime | None) -> dict:
+        """
+        Core reusable logic to compute Normal and OT hours for a given day.
+        Returns a dict: { "actual_hours": float, "normal_hours": float, "ot_hours_1_5x": float, "ot_hours_2x": float }
+        """
+        res = {"actual_hours": 0.0, "normal_hours": 0.0, "ot_hours_1_5x": 0.0, "ot_hours_2x": 0.0, "calculation_breakdown": []}
+        
+        if not clock_in or not clock_out:
+            return res
+            
+        steps = []
+            
+        # 1. Fetch Roster & Shift
+        roster_stmt = select(ShiftRoster).where(
+            and_(
+                ShiftRoster.employment_id == emp_id,
+                ShiftRoster.roster_date == work_date
+            )
+        )
+        roster = (await self.db.execute(roster_stmt)).scalar_one_or_none()
+        
+        shift = None
+        smart_match_applied = False
+        if roster and roster.shift_id:
+            shift = await self.get_shift(roster.shift_id)
+        else:
+            # Check Entity roster mode
+            entity_stmt = select(Entity.attendance_roster_mode).where(Entity.id == entity_id)
+            roster_mode = (await self.db.execute(entity_stmt)).scalar_one_or_none()
+            if roster_mode == "smart_match":
+                shift = await self.find_best_shift_match(entity_id, clock_in)
+                if shift:
+                    res["matched_shift_name"] = shift.name
+                    smart_match_applied = True
+                    
+        if shift:
+            prefix = "Smart-Match Shift: " if smart_match_applied else "Shift: "
+            steps.append(f"{prefix}{shift.name} ({shift.start_time.strftime('%I:%M %p')} - {shift.end_time.strftime('%I:%M %p')})")
+        else:
+            steps.append("No shift assigned (Manual Roster Mode)")
+
+        clock_in_str = clock_in.astimezone(SGT).strftime('%I:%M %p') if clock_in else "N/A"
+        clock_out_str = clock_out.astimezone(SGT).strftime('%I:%M %p') if clock_out else "In Progress"
+        steps.append(f"Punch: {clock_in_str} - {clock_out_str}")
+        
+        # 2. Fetch Employment for OT Eligibility
+        emp_stmt = select(Employment.is_ot_eligible).where(Employment.id == emp_id)
+        is_ot_eligible = (await self.db.execute(emp_stmt)).scalar_one_or_none()
+        if is_ot_eligible is None:
+            is_ot_eligible = True # Default
+            
+        # 3. Calculate Elapsed Time & Breaks
+        work_delta = clock_out - clock_in
+        total_elapsed_seconds = work_delta.total_seconds()
+        steps.append(f"Elapsed: {int(total_elapsed_seconds // 3600)}h {int((total_elapsed_seconds % 3600) // 60)}m")
+        
+        total_break_seconds = 0
+        if shift and shift.breaks:
+            break_details = []
+            for brk in shift.breaks:
+                if brk.is_paid: continue
+                brk_start_dt = datetime.combine(work_date, brk.break_start).replace(tzinfo=SGT)
+                brk_end_dt = datetime.combine(work_date, brk.break_end).replace(tzinfo=SGT)
+                if shift.start_time and brk.break_start < shift.start_time:
+                    brk_start_dt += timedelta(days=1)
+                    brk_end_dt += timedelta(days=1)
+                if brk_end_dt <= brk_start_dt:
+                    brk_end_dt += timedelta(days=1)
+                    
+                overlap_start = max(clock_in, brk_start_dt)
+                overlap_end = min(clock_out, brk_end_dt)
+                overlap_seconds = max(0, (overlap_end - overlap_start).total_seconds())
+                total_break_seconds += overlap_seconds
+                if overlap_seconds > 0:
+                    break_details.append(f"{brk.label} ({int(overlap_seconds // 60)}m)")
+            if break_details:
+                steps.append(f"Breaks deducted: {', '.join(break_details)}")
+        elif shift:
+            total_break_seconds = shift.break_minutes * 60
+            steps.append(f"Flat Break Deduction: {shift.break_minutes}m")
+            
+        actual_seconds = max(0, total_elapsed_seconds - total_break_seconds)
+        actual_hours = actual_seconds / 3600.0
+        res["actual_hours"] = actual_hours
+        
+        # 4. OT Calculation
+        day_type = roster.day_type if roster else "normal"
+        
+        # --- Dynamic Day Type Resolution (if not provided by Roster) ---
+        if day_type == "normal":
+            # Check Public Holiday
+            ph_dates = await self.get_ph_dates_set(entity_id, work_date, work_date)
+            if work_date in ph_dates:
+                day_type = "public_holiday"
+            else:
+                # Check Rest Day / Off Day dynamically using employment record
+                emp_record = await self.db.get(Employment, emp_id)
+                if emp_record:
+                    rest_day_str = (emp_record.rest_day or "sunday").lower()
+                    rest_day_num = self.WEEKDAY_MAP.get(rest_day_str, 6)
+                    work_days = float(emp_record.working_days_per_week or 6)
+                    weekday = work_date.weekday()
+                    
+                    if weekday == rest_day_num:
+                        day_type = "rest_day"
+                    elif work_days <= 5 and weekday == 5: # Saturday for 5-day week
+                        day_type = "off_day"
+        # ---------------------------------------------------------------
+        
+        scheduled_hours = float(shift.work_hours) if shift else 8.0
+        
+        if day_type == "rest_day" or day_type == "public_holiday":
+            res["normal_hours"] = 0.0
+            res["ot_hours_1_5x"] = 0.0
+            res["ot_hours_2x"] = actual_hours
+            steps.append(f"Rest Day/Public Holiday: {round(actual_hours, 2)}h OT 2.0x")
+        else:
+            res["normal_hours"] = min(actual_hours, scheduled_hours)
+            if is_ot_eligible:
+                res["ot_hours_1_5x"] = max(0, actual_hours - scheduled_hours)
+            else:
+                res["normal_hours"] = actual_hours
+                res["ot_hours_1_5x"] = 0.0
+            steps.append(f"Payable: {round(res['normal_hours'], 2)}h Normal" + (f", {round(res['ot_hours_1_5x'], 2)}h OT 1.5x" if res["ot_hours_1_5x"] > 0 else ""))
+                
+        # 5. Lateness & Early Exit
+        res["lateness_mins"] = 0
+        res["early_exit_mins"] = 0
+        if shift:
+            planned_start = datetime.combine(work_date, shift.start_time).replace(tzinfo=SGT)
+            planned_end = datetime.combine(work_date, shift.end_time).replace(tzinfo=SGT)
+            
+            if shift.is_overnight:
+                planned_end += timedelta(days=1)
+            
+            # Lateness
+            if clock_in > planned_start:
+                delay = (clock_in - planned_start).total_seconds() / 60.0
+                if delay > shift.lateness_grace_minutes:
+                    if shift.late_penalty_rounding_block > 0:
+                        res["lateness_mins"] = int(((delay + shift.late_penalty_rounding_block - 0.001) // shift.late_penalty_rounding_block) * shift.late_penalty_rounding_block)
+                    else:
+                        res["lateness_mins"] = int(delay)
+                    steps.append(f"Late: {res['lateness_mins']}m")
+            
+            # Early leave
+            if clock_out < planned_end:
+                early_exit_delay = (planned_end - clock_out).total_seconds() / 60.0
+                if early_exit_delay > shift.early_exit_grace_minutes:
+                    if shift.early_penalty_rounding_block > 0:
+                        res["early_exit_mins"] = int(((early_exit_delay + shift.early_penalty_rounding_block - 0.001) // shift.early_penalty_rounding_block) * shift.early_penalty_rounding_block)
+                    else:
+                        res["early_exit_mins"] = int(early_exit_delay)
+                    steps.append(f"Early Exit: {res['early_exit_mins']}m")
+                
+        # shift bonus
+        if shift:
+            res["ot_hours_1_5x"] += float(shift.offered_ot_1_5x)
+            res["ot_hours_2x"] += float(shift.offered_ot_2_0x)
+            if float(shift.offered_ot_1_5x) > 0 or float(shift.offered_ot_2_0x) > 0:
+                steps.append(f"Bonus Shift OT: {float(shift.offered_ot_1_5x)}h (1.5x), {float(shift.offered_ot_2_0x)}h (2.0x)")
+            
+        res["calculation_breakdown"] = steps
+        return res
+
     async def compute_daily_attendance(self, entity_id: uuid.UUID, work_date: date):
         """
         Processes all raw attendance records for a specific date and entity.
@@ -615,6 +1055,24 @@ class AttendanceService:
                 steps.append(f"Actual Payable: {round(actual_hours, 2)}h (In Progress)")
             else:
                 day_type = roster.day_type if roster else "normal"
+                
+                # --- Dynamic Day Type Resolution (if not provided by Roster) ---
+                if day_type == "normal":
+                    ph_dates = await self.get_ph_dates_set(entity_id, work_date, work_date)
+                    if work_date in ph_dates:
+                        day_type = "public_holiday"
+                    elif employment:
+                        rest_day_str = (employment.rest_day or "sunday").lower()
+                        rest_day_num = self.WEEKDAY_MAP.get(rest_day_str, 6)
+                        work_days = float(employment.working_days_per_week or 6)
+                        weekday = work_date.weekday()
+                        
+                        if weekday == rest_day_num:
+                            day_type = "rest_day"
+                        elif work_days <= 5 and weekday == 5:
+                            day_type = "off_day"
+                # ---------------------------------------------------------------
+                
                 scheduled_hours = float(shift.work_hours) if shift else 8.0
                 
                 normal_hours = 0.0

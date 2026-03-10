@@ -1,3 +1,4 @@
+import fastapi
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -139,6 +140,133 @@ async def list_attendance_records(
     
     service = AttendanceService(db)
     return await service.get_attendance_records(entity_id, start_date, end_date, employment_id)
+
+@router.get("/import/template")
+async def download_timesheet_template(
+    current_user: User = Depends(get_current_user)
+):
+    from fastapi.responses import Response
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Timesheet Import"
+
+    headers = [
+        "Employee ID",
+        "Date",          # YYYY-MM-DD
+        "Clock In",      # HH:MM or YYYY-MM-DD HH:MM
+        "Clock Out",     # HH:MM or YYYY-MM-DD HH:MM
+        "Notes"
+    ]
+
+    header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    alignment = Alignment(horizontal="center", vertical="center")
+
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = alignment
+        ws.column_dimensions[get_column_letter(col_num)].width = max(len(header) + 5, 15)
+
+    # Sample rows
+    samples = [
+        ["EMP-001", "2023-10-25", "09:00", "18:00", "Regular shift"],
+        ["EMP-002", "2023-10-25", "2023-10-25 08:45", "2023-10-25 17:30", "Early clock in"]
+    ]
+    for r_idx, row in enumerate(samples, 2):
+        for c_idx, value in enumerate(row, 1):
+            ws.cell(row=r_idx, column=c_idx, value=value)
+
+    # Instructions sheet
+    note_ws = wb.create_sheet("Instructions")
+    instructions = [
+        "How to use this template:",
+        "1. Employee ID is required and must match the system's Employee ID exactly.",
+        "2. Date must be in YYYY-MM-DD format (e.g., 2023-10-25).",
+        "3. Clock In/Out can be just time (HH:MM) or full datetime (YYYY-MM-DD HH:MM).",
+        "4. If only time is provided, the Date column will be used for the date part.",
+        "5. Do not modify the header row (Row 1)."
+    ]
+    for i, note in enumerate(instructions, 1):
+        note_ws.cell(row=i, column=1, value=note)
+
+    # Save to memory
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    
+    return Response(
+        content=stream.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=timesheet_template.xlsx"
+        }
+    )
+
+from app.schemas.attendance import TimesheetPreviewResponse, TimesheetConfirmPayload, TimesheetConfirmResponse
+
+@router.post("/import/preview", response_model=TimesheetPreviewResponse)
+async def preview_timesheet(
+    entity_id: uuid.UUID = Query(...),
+    file: fastapi.UploadFile = fastapi.File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import fastapi
+    from app.api.v1.dependencies import get_entity_access
+    
+    # Must be HR Admin or full admin
+    if not current_user.is_tenant_admin:
+        role = await get_entity_access(entity_id, current_user, db)
+        if role != "hr_admin":
+            raise HTTPException(status_code=403, detail="Not enough permissions to import timesheets")
+            
+    if not file.filename.endswith(('.csv', '.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Only CSV or Excel files are accepted")
+        
+    content = await file.read()
+    service = AttendanceService(db)
+    
+    try:
+        result = await service.preview_timesheet_data(entity_id, content, file.filename)
+        # Note: Do NOT commit here, this is just a preview
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+@router.post("/import/confirm", response_model=TimesheetConfirmResponse)
+async def confirm_timesheet(
+    payload: TimesheetConfirmPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.api.v1.dependencies import get_entity_access
+    
+    # Must be HR Admin or full admin
+    if not current_user.is_tenant_admin:
+        role = await get_entity_access(payload.entity_id, current_user, db)
+        if role != "hr_admin":
+            raise HTTPException(status_code=403, detail="Not enough permissions to import timesheets")
+
+    service = AttendanceService(db)
+    try:
+        # Convert Pydantic models to dicts for the service method
+        records_data = [rec.model_dump() for rec in payload.records]
+        result = await service.confirm_timesheet_import(payload.entity_id, records_data)
+        await db.commit()
+        return result
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to confirm import: {str(e)}")
+
 
 @router.post("/records", response_model=AttendanceRecordRead)
 async def create_manual_record(

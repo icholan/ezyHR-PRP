@@ -6,7 +6,7 @@ from app.models.payroll import SalaryStructure
 from app.schemas.employee import (
     EmployeeFullCreate, EmployeeSummary, EmployeeFullUpdate,
     EmployeeDetail, EmployeeDetailPerson, EmployeeDetailEmployment, EmployeeDetailBank,
-    SalaryComponentRead
+    SalaryComponentRead, PersonRead
 )
 from app.core.security.encryption import encryptor
 from datetime import date
@@ -31,12 +31,17 @@ class EmployeeService:
 
     async def is_nric_duplicate(self, tenant_id: uuid.UUID, nric: str) -> bool:
         """Check if NRIC hash exists for the tenant."""
+        person = await self.get_person_by_nric(tenant_id, nric)
+        return person is not None
+
+    async def get_person_by_nric(self, tenant_id: uuid.UUID, nric: str) -> Optional[Person]:
+        """Fetch Person by NRIC hash within a tenant."""
         if not nric:
-            return False
+            return None
         h = encryptor.get_hash(nric)
-        query = select(Person.id).where(Person.tenant_id == tenant_id, Person.nric_fin_hash == h).limit(1)
+        query = select(Person).where(Person.tenant_id == tenant_id, Person.nric_fin_hash == h).limit(1)
         result = await self.db.execute(query)
-        return result.scalar() is not None
+        return result.scalar_one_or_none()
 
     async def is_employee_code_duplicate(self, entity_id: uuid.UUID, code: str) -> bool:
         """Check if employee code exists for the entity."""
@@ -47,23 +52,31 @@ class EmployeeService:
         return result.scalar() is not None
 
     async def create_employee(self, tenant_id: uuid.UUID, data: EmployeeFullCreate) -> Employment:
-        # 1. Create Person
-        person_dict = data.person.model_dump()
-        raw_nric = person_dict.pop("nric_fin")
-        person = Person(
-            **person_dict,
-            tenant_id=tenant_id,
-            nric_fin=encryptor.encrypt(raw_nric),
-            nric_fin_hash=encryptor.get_hash(raw_nric)
-        )
-        self.db.add(person)
-        try:
-            await self.db.flush() # Get person.id
-        except IntegrityError as e:
-            await self.db.rollback()
-            if "uq_persons_nric" in str(e):
-                raise HTTPException(status_code=400, detail="NRIC/FIN already exists for this tenant.")
-            raise e
+        # 1. Handle Person
+        if data.person_id:
+            person_result = await self.db.execute(select(Person).where(Person.id == data.person_id))
+            person = person_result.scalar_one_or_none()
+            if not person:
+                raise HTTPException(status_code=404, detail="Selected person profile not found.")
+        elif data.person:
+            person_dict = data.person.model_dump()
+            raw_nric = person_dict.pop("nric_fin")
+            person = Person(
+                **person_dict,
+                tenant_id=tenant_id,
+                nric_fin=encryptor.encrypt(raw_nric),
+                nric_fin_hash=encryptor.get_hash(raw_nric)
+            )
+            self.db.add(person)
+            try:
+                await self.db.flush() # Get person.id
+            except IntegrityError as e:
+                await self.db.rollback()
+                if "uq_persons_nric" in str(e):
+                    raise HTTPException(status_code=400, detail="NRIC/FIN already exists for this tenant.")
+                raise e
+        else:
+            raise HTTPException(status_code=400, detail="Either person data or person_id must be provided.")
 
         # 2. Create Employment
         emp_dict = data.employment.model_dump()
@@ -144,7 +157,12 @@ class EmployeeService:
                 grade_name=grd.name if grd else None,
                 is_active=emp.is_active,
                 join_date=emp.join_date,
-                person_id=person.id
+                person_id=person.id,
+                citizenship_type=emp.citizenship_type,
+                pr_year=emp.pr_year,
+                work_pass_type=emp.work_pass_type,
+                work_pass_no=emp.work_pass_no,
+                work_pass_expiry=emp.work_pass_expiry
             ))
         return summaries
 
@@ -351,3 +369,54 @@ class EmployeeService:
         employment.resign_date = date.today()
         await self.db.commit()
         return True
+    async def get_tenant_persons(self, tenant_id: uuid.UUID) -> List[PersonRead]:
+        result = await self.db.execute(
+            select(Person).where(Person.tenant_id == tenant_id)
+        )
+        persons = result.scalars().all()
+        return [PersonRead.model_validate(p) for p in persons]
+
+    async def get_person_employments(self, person_id: uuid.UUID) -> List[EmployeeSummary]:
+        from app.models.tenant import Entity
+        query = (
+            select(Employment, Person, Department, Group, Grade, Entity)
+            .join(Person, Employment.person_id == Person.id)
+            .join(Entity, Employment.entity_id == Entity.id)
+            .outerjoin(Department, Employment.department_id == Department.id)
+            .outerjoin(Group, Employment.group_id == Group.id)
+            .outerjoin(Grade, Employment.grade_id == Grade.id)
+            .where(Employment.person_id == person_id)
+        )
+        result = await self.db.execute(query)
+        rows = result.all()
+        
+        summaries = []
+        for emp, person, dept, grp, grd, ent in rows:
+            summaries.append(EmployeeSummary(
+                id=emp.id,
+                full_name=person.full_name,
+                employee_code=emp.employee_code,
+                job_title=emp.job_title,
+                department_name=dept.name if dept else None,
+                group_name=grp.name if grp else None,
+                grade_name=grd.name if grd else None,
+                is_active=emp.is_active,
+                join_date=emp.join_date,
+                person_id=person.id,
+                entity_name=ent.name,
+                citizenship_type=emp.citizenship_type,
+                pr_year=emp.pr_year,
+                work_pass_type=emp.work_pass_type,
+                work_pass_no=emp.work_pass_no,
+                work_pass_expiry=emp.work_pass_expiry
+            ))
+        return summaries
+
+    async def get_person_by_id(self, person_id: uuid.UUID) -> Optional[PersonRead]:
+        result = await self.db.execute(
+            select(Person).where(Person.id == person_id)
+        )
+        person = result.scalar_one_or_none()
+        if person:
+            return PersonRead.model_validate(person)
+        return None

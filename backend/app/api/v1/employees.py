@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.api.v1.dependencies import get_db, get_current_active_user
-from app.schemas.employee import EmployeeFullCreate, EmployeeSummary, EmployeeDetail, EmployeeFullUpdate
+from app.schemas.employee import EmployeeFullCreate, EmployeeSummary, EmployeeDetail, EmployeeFullUpdate, PersonRead
 from app.services.employee import EmployeeService
 from app.models import User
 import uuid
@@ -16,8 +16,48 @@ async def check_nric(
     current_user: User = Depends(get_current_active_user)
 ):
     service = EmployeeService(db)
-    is_duplicate = await service.is_nric_duplicate(current_user.tenant_id, nric)
-    return {"is_duplicate": is_duplicate}
+    person = await service.get_person_by_nric(current_user.tenant_id, nric)
+    if person:
+        return {
+            "is_duplicate": True,
+            "person": PersonRead.model_validate(person)
+        }
+    return {"is_duplicate": False, "person": None}
+
+@router.get("/persons", response_model=List[PersonRead])
+async def list_persons(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not current_user.is_tenant_admin:
+        raise HTTPException(status_code=403, detail="Only tenant admins can view all persons")
+    service = EmployeeService(db)
+    return await service.get_tenant_persons(current_user.tenant_id)
+
+@router.get("/persons/{person_id}/employments", response_model=List[EmployeeSummary])
+async def list_person_employments(
+    person_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not current_user.is_tenant_admin:
+        raise HTTPException(status_code=403, detail="Only tenant admins can view multi-entity employments")
+    service = EmployeeService(db)
+    return await service.get_person_employments(person_id)
+
+@router.get("/persons/{person_id}", response_model=PersonRead)
+async def get_person(
+    person_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not current_user.is_tenant_admin:
+        raise HTTPException(status_code=403, detail="Only tenant admins can view person details")
+    service = EmployeeService(db)
+    person = await service.get_person_by_id(person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return person
 
 @router.get("/check-code")
 async def check_code(

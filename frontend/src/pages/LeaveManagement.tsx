@@ -10,6 +10,8 @@ import {
     FileText,
     History,
     ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Loader2,
     ShieldCheck,
     Info,
@@ -54,6 +56,7 @@ const LeaveManagement = () => {
     const [editingEntitlement, setEditingEntitlement] = useState<any | null>(null);
     const [entitlementYear, setEntitlementYear] = useState(new Date().getFullYear());
     const [entitlementSearch, setEntitlementSearch] = useState('');
+    const [expandedEmployees, setExpandedEmployees] = useState<Set<string>>(new Set());
 
     // Sync viewMode with path if it changes (e.g. sidebar navigation)
     useEffect(() => {
@@ -142,10 +145,11 @@ const LeaveManagement = () => {
     };
 
     const groupedEntitlements = useMemo(() => {
-        const groups: Record<string, { employee_name: string, employee_code: string, entitlements: any[] }> = {};
+        const groups: Record<string, { employment_id: string, employee_name: string, employee_code: string, entitlements: any[] }> = {};
         allEntitlements.forEach(ent => {
             if (!groups[ent.employment_id]) {
                 groups[ent.employment_id] = {
+                    employment_id: ent.employment_id,
                     employee_name: ent.employee_name,
                     employee_code: ent.employee_code,
                     entitlements: []
@@ -155,6 +159,23 @@ const LeaveManagement = () => {
         });
         return Object.values(groups);
     }, [allEntitlements]);
+
+    const toggleEmployee = (empId: string) => {
+        setExpandedEmployees(prev => {
+            const next = new Set(prev);
+            if (next.has(empId)) next.delete(empId);
+            else next.add(empId);
+            return next;
+        });
+    };
+
+    const toggleAllEmployees = (expand: boolean) => {
+        if (expand) {
+            setExpandedEmployees(new Set(groupedEntitlements.map(g => g.employment_id)));
+        } else {
+            setExpandedEmployees(new Set());
+        }
+    };
 
     const handleUpdateEntitlement = async () => {
         if (!editingEntitlement) return;
@@ -540,6 +561,20 @@ const LeaveManagement = () => {
                             >
                                 <Clock className="w-4 h-4" />
                             </button>
+                            <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl ml-2">
+                                <button
+                                    onClick={() => toggleAllEmployees(true)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white dark:hover:bg-gray-700 transition-all text-gray-500 hover:text-purple-600"
+                                >
+                                    Expand All
+                                </button>
+                                <button
+                                    onClick={() => toggleAllEmployees(false)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white dark:hover:bg-gray-700 transition-all text-gray-500 hover:text-purple-600"
+                                >
+                                    Collapse All
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div className="overflow-x-auto">
@@ -550,45 +585,63 @@ const LeaveManagement = () => {
                                     <th className="px-8 py-4 text-left text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Leave Type</th>
                                     <th className="px-8 py-4 text-left text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total</th>
                                     <th className="px-8 py-4 text-left text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Used/Pending</th>
+                                    <th className="px-8 py-4 text-left text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Available</th>
                                     <th className="px-8 py-4 text-left text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Carried</th>
                                     <th className="px-8 py-4 text-left text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
-                                {groupedEntitlements.map((group) => (
-                                    <React.Fragment key={group.employee_code}>
-                                        <tr className="bg-gray-50/50 dark:bg-gray-800/20">
-                                            <td colSpan={6} className="px-8 py-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="font-bold text-dark-950 dark:text-gray-50">{group.employee_name}</div>
-                                                    <div className="text-[10px] text-gray-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-full uppercase tracking-widest">{group.employee_code}</div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        {group.entitlements.map((ent) => (
-                                            <tr key={ent.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                                <td className="px-8 py-4 pl-12">
-                                                    {/* Empty column for alignment under employee name */}
-                                                </td>
-                                                <td className="px-8 py-4 text-sm font-semibold">{ent.leave_type_name}</td>
-                                                <td className="px-8 py-4 text-sm font-bold text-purple-600">{ent.total_days}</td>
-                                                <td className="px-8 py-4 text-xs font-medium text-gray-500">{ent.used_days} / {ent.pending_days}</td>
-                                                <td className="px-8 py-4 text-sm text-amber-600 font-bold">{ent.carried_over_days}</td>
-                                                <td className="px-8 py-4">
-                                                    <button
-                                                        onClick={() => {
-                                                            setError(null);
-                                                            setEditingEntitlement({ ...ent });
-                                                        }}
-                                                        className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-all text-xs font-bold flex items-center gap-1"
-                                                    >
-                                                        <TrendingUp className="w-4 h-4" /> Adjust
-                                                    </button>
+                                {groupedEntitlements.map((group) => {
+                                    const isExpanded = expandedEmployees.has(group.employment_id);
+                                    return (
+                                        <React.Fragment key={group.employment_id}>
+                                            <tr
+                                                className="bg-gray-50/50 dark:bg-gray-800/20 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/40 transition-colors"
+                                                onClick={() => toggleEmployee(group.employment_id)}
+                                            >
+                                                <td colSpan={6} className="px-8 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-1 hover:bg-white dark:hover:bg-gray-700 rounded-md transition-colors">
+                                                            {isExpanded ? <ChevronUp className="w-4 h-4 text-purple-600" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="font-bold text-dark-950 dark:text-gray-50">{group.employee_name}</div>
+                                                            <div className="text-[10px] text-gray-500 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-2 py-0.5 rounded-full uppercase tracking-widest">{group.employee_code}</div>
+                                                        </div>
+                                                        <div className="text-[10px] font-bold text-gray-400 ml-auto">
+                                                            {group.entitlements.length} Entitlements
+                                                        </div>
+                                                    </div>
                                                 </td>
                                             </tr>
-                                        ))}
-                                    </React.Fragment>
-                                ))}
+                                            {isExpanded && group.entitlements.map((ent) => (
+                                                <tr key={ent.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors animate-in slide-in-from-top-1 duration-200">
+                                                    <td className="px-8 py-4 pl-16">
+                                                        {/* Indented indicator */}
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-purple-200" />
+                                                    </td>
+                                                    <td className="px-8 py-4 text-sm font-semibold">{ent.leave_type_name}</td>
+                                                    <td className="px-8 py-4 text-sm font-bold text-purple-600">{ent.total_days}</td>
+                                                    <td className="px-8 py-4 text-xs font-medium text-gray-500">{ent.used_days} / {ent.pending_days}</td>
+                                                    <td className="px-8 py-4 text-sm font-bold text-emerald-600 dark:text-emerald-400">{ent.available_days}</td>
+                                                    <td className="px-8 py-4 text-sm text-amber-600 font-bold">{ent.carried_over_days}</td>
+                                                    <td className="px-8 py-4">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setError(null);
+                                                                setEditingEntitlement({ ...ent });
+                                                            }}
+                                                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-all text-xs font-bold flex items-center gap-1"
+                                                        >
+                                                            <TrendingUp className="w-4 h-4" /> Adjust
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </React.Fragment>
+                                    );
+                                })}
                             </tbody>
 
                         </table>

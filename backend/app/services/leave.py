@@ -1060,7 +1060,8 @@ class LeaveService:
                 "total_days": float(ent.total_days),
                 "used_days": float(ent.used_days),
                 "pending_days": float(ent.pending_days),
-                "carried_over_days": float(ent.carried_over_days)
+                "carried_over_days": float(ent.carried_over_days),
+                "available_days": float(ent.total_days + ent.carried_over_days - ent.used_days - ent.pending_days)
             })
         return entitlements
 

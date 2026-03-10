@@ -15,7 +15,8 @@ import {
     Key,
     Building2,
     BookOpen,
-    History as HistoryIcon
+    History as HistoryIcon,
+    Link as LinkIcon
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
@@ -34,6 +35,7 @@ const menuGroups = [
         title: 'People & Payroll',
         items: [
             { icon: Users, label: 'Employees', path: '/employees' },
+            { icon: LinkIcon, label: 'Multi-Entity Linking', path: '/employees/multi-management', isAdmin: true },
             { icon: Wallet, label: 'Payroll', path: '/payroll' },
             { icon: FileText, label: 'KET Management', path: '/ket' },
             { icon: Calendar, label: 'My Leave', path: '/leave/my' },
@@ -45,6 +47,7 @@ const menuGroups = [
             { icon: Clock, label: 'Time Clock', path: '/attendance/clock' },
             { icon: HistoryIcon, label: 'Punch History', path: '/attendance/history' },
             { icon: FileText, label: 'Attendance Logs', path: '/attendance/logs' },
+            { icon: FileText, label: 'Import Timesheet', path: '/attendance/import' },
             { icon: Calendar, label: 'Roster', path: '/attendance/roster' },
             { icon: Calendar, label: 'Public Holidays', path: '/attendance/public-holidays' },
             { icon: ShieldCheck, label: 'Team Leave & Entitlement', path: '/attendance/leave/team', isAdmin: true },

@@ -15,6 +15,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuthStore } from '../store/useAuthStore';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -37,10 +38,14 @@ const KETDashboard = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
 
+    const user = useAuthStore((state) => state.user);
+    const entityId = user?.selected_entity_id;
+
     useEffect(() => {
         const fetchDashboard = async () => {
             try {
-                const response = await api.get('/api/v1/ket/dashboard');
+                setLoading(true);
+                const response = await api.get(`/api/v1/ket/dashboard?entity_id=${entityId || ''}`);
                 setStats(response.data.stats);
                 setItems(response.data.items);
             } catch (error) {
@@ -51,7 +56,7 @@ const KETDashboard = () => {
             }
         };
         fetchDashboard();
-    }, []);
+    }, [entityId]);
 
     const filteredItems = items.filter(item => {
         const matchesSearch = item.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||

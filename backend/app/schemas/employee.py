@@ -109,6 +109,12 @@ class EmployeeSummary(BaseModel):
     is_active: bool
     join_date: date
     person_id: uuid.UUID
+    entity_name: Optional[str] = None
+    citizenship_type: Optional[str] = None
+    pr_year: Optional[int] = None
+    work_pass_type: Optional[str] = None
+    work_pass_no: Optional[str] = None
+    work_pass_expiry: Optional[date] = None
 
 class EmployeeDetailPerson(BaseModel):
     id: uuid.UUID
@@ -209,7 +215,8 @@ class EmployeeDetail(BaseModel):
     salary_components: List[SalaryComponentRead] = []
 
 class EmployeeFullCreate(BaseModel):
-    person: PersonCreate
+    person_id: Optional[uuid.UUID] = None
+    person: Optional[PersonCreate] = None
     employment: EmploymentCreate
     bank_account: Optional[BankAccountCreate] = None
     salary_components: List[SalaryComponentCreateLocal] = []

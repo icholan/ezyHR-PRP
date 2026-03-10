@@ -13,6 +13,7 @@ import PayrollNew from './pages/PayrollNew';
 import PayrollDetail from './pages/PayrollDetail';
 import Payslip from './pages/Payslip';
 import Attendance from './pages/Attendance';
+import MultiEntityManagement from './pages/MultiEntityManagement';
 import LeaveManagement from './pages/LeaveManagement';
 import KETDashboard from './pages/KETDashboard';
 import KETEditor from './pages/KETEditor';
@@ -35,6 +36,7 @@ import PublicHolidays from './pages/attendance/PublicHolidays';
 import TimeClock from './pages/attendance/TimeClock';
 import AttendanceLogs from './pages/attendance/AttendanceLogs';
 import PunchHistory from './pages/attendance/PunchHistory';
+import ImportTimesheet from './pages/attendance/ImportTimesheet';
 
 function App() {
     return (
@@ -49,6 +51,7 @@ function App() {
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="dashboard" element={<Dashboard />} />
                     <Route path="employees" element={<Employees />} />
+                    <Route path="employees/multi-management" element={<MultiEntityManagement />} />
                     <Route path="employees/add" element={<AddEmployee />} />
                     <Route path="employees/:id" element={<EmployeeProfile />} />
                     <Route path="payroll" element={<Payroll />} />
@@ -64,6 +67,7 @@ function App() {
                     <Route path="attendance/history" element={<PunchHistory />} />
                     <Route path="attendance/logs" element={<AttendanceLogs />} />
                     <Route path="attendance/roster" element={<RosterManagement />} />
+                    <Route path="attendance/import" element={<ImportTimesheet />} />
                     <Route path="attendance/public-holidays" element={<PublicHolidays />} />
                     <Route path="audit" element={<div>AI Audit Panel</div>} />
                     <Route path="reports" element={<Reports />} />

@@ -28,7 +28,7 @@ import {
     Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { clsx } from 'clsx';
 import DatePicker from '../components/DatePicker';
@@ -47,12 +47,16 @@ const REQUIRED_PERSON_FIELDS: { key: string; label: string }[] = [
 
 const AddEmployee = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useAuthStore();
     const selectedEntityId = user?.selected_entity_id;
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [sameAsMobile, setSameAsMobile] = useState(false);
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+    const [existingPerson, setExistingPerson] = useState<any>(null);
+    const [isLinking, setIsLinking] = useState(false);
+    const [initiallyLinked, setInitiallyLinked] = useState(false);
 
     // Master data
     const [departments, setDepartments] = useState<any[]>([]);
@@ -78,7 +82,7 @@ const AddEmployee = () => {
             address: ''
         },
         employment: {
-            entity_id: selectedEntityId || '00000000-0000-0000-0000-000000000000',
+            entity_id: location.state?.targetEntityId || selectedEntityId || '00000000-0000-0000-0000-000000000000',
             employee_code: '',
             job_title: '',
             employment_type: 'full_time',
@@ -93,9 +97,9 @@ const AddEmployee = () => {
             group_id: '',
             grade_id: '',
             working_days_per_week: '',
-            rest_day: '',
-            work_hours_per_day: '',
-            normal_work_hours_per_week: '',
+            rest_day: 'Sunday',
+            work_hours_per_day: '8',
+            normal_work_hours_per_week: '44',
             basic_salary: 0,
             foreign_worker_levy: 0,
             is_ot_eligible: true
@@ -134,6 +138,47 @@ const AddEmployee = () => {
             fetchMasters();
         }
     }, [selectedEntityId]);
+    useEffect(() => {
+        if (location.state?.linkPersonId && !initiallyLinked) {
+            handleInitialLink(location.state.linkPersonId);
+        }
+
+        // If a target entity was passed (from multi-entity linking), set it in the form
+        if (location.state?.targetEntityId) {
+            handleInputChange('employment', 'entity_id', location.state.targetEntityId);
+        }
+    }, [location.state, initiallyLinked]);
+
+    const handleInitialLink = async (personId: string) => {
+        try {
+            setLoading(true);
+            const res = await api.get(`/api/v1/employees/persons/${personId}`);
+            if (res.data) {
+                // Pre-fill person data
+                setFormData(prev => ({
+                    ...prev,
+                    person: {
+                        ...prev.person,
+                        ...res.data,
+                        nric_fin: '********' // Masked since we don't have full NRIC here usually
+                    },
+                    employment: {
+                        ...prev.employment,
+                        ...(location.state?.prefillDetails || {})
+                    }
+                }));
+                setExistingPerson(res.data);
+                setIsLinking(true);
+                setInitiallyLinked(true);
+                toast.success(`Linking existing profile: ${res.data.full_name}`);
+            }
+        } catch (error) {
+            console.error("Failed to load person for linking", error);
+            toast.error("Failed to load existing profile");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleInputChange = (section: string, field: string, value: any) => {
         setFormData(prev => ({
@@ -189,6 +234,7 @@ const AddEmployee = () => {
             { key: 'group_id', label: 'Employment Group' },
             { key: 'working_days_per_week', label: 'Working Days' },
             { key: 'normal_work_hours_per_week', label: 'Work Hours' },
+            { key: 'work_hours_per_day', label: 'Work Hours Per Day' },
         ];
 
         for (const { key, label } of requiredFields) {
@@ -233,12 +279,29 @@ const AddEmployee = () => {
             try {
                 const res = await api.get('/api/v1/employees/check-nric', { params: { nric: formData.person.nric_fin } });
                 if (res.data.is_duplicate) {
-                    const msg = "NRIC/FIN already exists for this tenant.";
-                    toast.error(msg);
+                    setExistingPerson(res.data.person);
+                    const msg = "This NRIC/FIN already exists in the system.";
                     setFormErrors(prev => ({ ...prev, nric_fin: msg }));
+                    toast((t) => (
+                        <div className="flex flex-col gap-2">
+                            <p className="font-bold text-sm">{msg}</p>
+                            <p className="text-xs text-gray-500">Would you like to link the existing profile?</p>
+                            <button
+                                onClick={() => {
+                                    handleLinkProfile(res.data.person);
+                                    toast.dismiss(t.id);
+                                }}
+                                className="bg-primary-600 text-white px-3 py-1 rounded text-xs font-bold"
+                            >
+                                Link Existing Profile
+                            </button>
+                        </div>
+                    ), { duration: 6000 });
                     setLoading(false);
                     return;
                 }
+                setExistingPerson(null);
+                setIsLinking(false);
             } catch (error) {
                 console.error("Check NRIC failed", error);
             } finally {
@@ -273,6 +336,42 @@ const AddEmployee = () => {
         setStep(s => Math.min(3, s + 1));
     };
 
+    const handleLinkProfile = (person: any) => {
+        if (!person) return;
+        setFormData(prev => ({
+            ...prev,
+            person: {
+                ...prev.person,
+                full_name: person.full_name || prev.person.full_name,
+                personal_email: person.personal_email || prev.person.personal_email,
+                contact_number: person.contact_number || prev.person.contact_number,
+                mobile_number: person.mobile_number || prev.person.mobile_number,
+                whatsapp_number: person.whatsapp_number || prev.person.whatsapp_number,
+                date_of_birth: person.date_of_birth || prev.person.date_of_birth,
+                gender: person.gender || prev.person.gender,
+                nationality: person.nationality || prev.person.nationality,
+                race: person.race || prev.person.race,
+                language: person.language || prev.person.language,
+                highest_education: person.highest_education || prev.person.highest_education,
+                pr_start_date: person.pr_start_date || prev.person.pr_start_date,
+                address: person.address || prev.person.address
+            },
+            employment: {
+                ...prev.employment,
+                // Nationality syncs with citizenship_type
+                citizenship_type: person.nationality === 'Singapore Citizen' ? 'citizen' :
+                    person.nationality === 'SPR' ? 'pr' : 'foreigner'
+            }
+        }));
+        setIsLinking(true);
+        setFormErrors(prev => {
+            const next = { ...prev };
+            delete next.nric_fin;
+            return next;
+        });
+        toast.success("Profile linked successfully!");
+    };
+
     const handleSameAsMobile = (checked: boolean) => {
         setSameAsMobile(checked);
         if (checked) {
@@ -293,7 +392,8 @@ const AddEmployee = () => {
         };
 
         const sanitizedData = {
-            person: Object.fromEntries(
+            person_id: isLinking ? existingPerson?.id : null,
+            person: isLinking ? null : Object.fromEntries(
                 Object.entries(formData.person).map(([k, v]) => [k, sanitizeValue(v)])
             ),
             employment: Object.fromEntries(
@@ -425,6 +525,55 @@ const AddEmployee = () => {
                 <div className="flex-1">
                     {step === 1 && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* Existing Profile Banner */}
+                            {existingPerson && (
+                                <div className={clsx(
+                                    "p-4 rounded-2xl border flex items-center justify-between gap-4",
+                                    isLinking ? "bg-green-50 border-green-100 dark:bg-green-900/10 dark:border-green-900/30" : "bg-amber-50 border-amber-100 dark:bg-amber-900/10 dark:border-amber-900/30"
+                                )}>
+                                    <div className="flex items-start gap-3">
+                                        <div className={clsx(
+                                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                            isLinking ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+                                        )}>
+                                            <User className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className={clsx("font-bold", isLinking ? "text-green-900 dark:text-green-100" : "text-amber-900 dark:text-amber-100")}>
+                                                {isLinking ? "Existing Profile Linked" : "Existing Profile Found"}
+                                            </p>
+                                            <p className={clsx("text-sm", isLinking ? "text-green-700 dark:text-green-300" : "text-amber-700 dark:text-amber-300")}>
+                                                {isLinking
+                                                    ? `This record is linked to ${existingPerson.full_name}'s profile.`
+                                                    : `A profile with this NRIC/FIN already exists (${existingPerson.full_name}).`
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {!isLinking && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleLinkProfile(existingPerson)}
+                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-bold transition-all shadow-sm shrink-0"
+                                        >
+                                            Link Profile
+                                        </button>
+                                    )}
+                                    {isLinking && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsLinking(false);
+                                                setExistingPerson(null);
+                                            }}
+                                            className="text-xs text-green-600 font-bold hover:underline"
+                                        >
+                                            Unlink
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Identity Section */}
                             <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Identity</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -435,9 +584,10 @@ const AddEmployee = () => {
                                         <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
                                         <input
                                             type="text"
-                                            className={clsx('input-field pl-12', formErrors.full_name && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
+                                            className={clsx('input-field pl-12', formErrors.full_name && 'border-red-400 focus:border-red-400 focus:ring-red-500/20', isLinking && 'bg-gray-50 dark:bg-gray-800/60 cursor-not-allowed')}
                                             placeholder="John Doe"
                                             value={formData.person.full_name}
+                                            disabled={isLinking}
                                             onChange={(e) => handleInputChange('person', 'full_name', e.target.value)}
                                         />
                                     </div>
@@ -448,9 +598,10 @@ const AddEmployee = () => {
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">NRIC / FIN{req}</label>
                                     <input
                                         type="text"
-                                        className={clsx('input-field', formErrors.nric_fin && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
+                                        className={clsx('input-field', formErrors.nric_fin && 'border-red-400 focus:border-red-400 focus:ring-red-500/20', isLinking && 'bg-gray-50 dark:bg-gray-800/60 cursor-not-allowed')}
                                         placeholder="S1234567A"
                                         value={formData.person.nric_fin}
+                                        disabled={isLinking}
                                         onChange={(e) => handleInputChange('person', 'nric_fin', e.target.value)}
                                     />
                                     {fieldError('nric_fin')}
@@ -463,6 +614,7 @@ const AddEmployee = () => {
                                         onChange={(v) => handleInputChange('person', 'date_of_birth', v)}
                                         placeholder="Select date of birth"
                                         error={formErrors.date_of_birth}
+                                        disabled={isLinking}
                                     />
                                     {fieldError('date_of_birth')}
                                 </div>
@@ -479,6 +631,7 @@ const AddEmployee = () => {
                                             value={formData.person.gender}
                                             onChange={(val) => handleInputChange('person', 'gender', val)}
                                             placeholder="Select Gender"
+                                            disabled={isLinking}
                                         />
                                     </div>
                                     {fieldError('gender')}
@@ -506,6 +659,7 @@ const AddEmployee = () => {
                                                 }
                                             }}
                                             placeholder="Select Nationality"
+                                            disabled={isLinking}
                                         />
                                     </div>
                                     {fieldError('nationality')}
@@ -525,6 +679,7 @@ const AddEmployee = () => {
                                             value={formData.person.race}
                                             onChange={(val) => handleInputChange('person', 'race', val)}
                                             placeholder="Select Race"
+                                            disabled={isLinking}
                                         />
                                     </div>
                                     {fieldError('race')}
@@ -891,9 +1046,20 @@ const AddEmployee = () => {
                                             max="7"
                                             className={clsx('input-field pl-12', formErrors.working_days_per_week && 'border-red-400 focus:border-red-400 focus:ring-red-500/20')}
                                             placeholder="e.g. 5"
+                                            list="working-days-suggestions"
                                             value={formData.employment.working_days_per_week}
                                             onChange={(e) => handleInputChange('employment', 'working_days_per_week', e.target.value)}
                                         />
+                                        <datalist id="working-days-suggestions">
+                                            <option value="3" />
+                                            <option value="3.5" />
+                                            <option value="4" />
+                                            <option value="4.5" />
+                                            <option value="5" />
+                                            <option value="5.25" />
+                                            <option value="5.5" />
+                                            <option value="6" />
+                                        </datalist>
                                     </div>
                                     {fieldError('working_days_per_week')}
                                 </div>
@@ -916,7 +1082,7 @@ const AddEmployee = () => {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Work Hours Per Day</label>
+                                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Work Hours Per Day{req}</label>
                                     <div className="relative">
                                         <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
                                         <input
@@ -930,6 +1096,7 @@ const AddEmployee = () => {
                                             onChange={(e) => handleInputChange('employment', 'work_hours_per_day', e.target.value)}
                                         />
                                     </div>
+                                    {fieldError('work_hours_per_day')}
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Normal Work Hours Per Week{req}</label>

@@ -63,6 +63,7 @@ class LeaveEntitlementRead(BaseModel):
     used_days: float
     pending_days: float
     carried_over_days: float
+    available_days: float
 
     class Config:
         from_attributes = True

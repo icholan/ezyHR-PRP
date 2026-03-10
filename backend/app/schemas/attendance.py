@@ -220,3 +220,43 @@ class PublicHolidayUpdate(BaseModel):
 class PublicHolidaySeed(BaseModel):
     entity_id: uuid.UUID
     year: int
+
+# --- Timesheet Import Schemas ---
+class TimesheetPreviewRow(BaseModel):
+    row_index: int
+    employee_code: Optional[str] = None
+    employment_id: Optional[uuid.UUID] = None
+    employee_name: Optional[str] = None
+    work_date: Optional[date] = None
+    clock_in: Optional[datetime] = None
+    clock_out: Optional[datetime] = None
+    matched_shift_name: Optional[str] = None
+    normal_hours: float = 0.0
+    ot_hours_1_5x: float = 0.0
+    ot_hours_2x: float = 0.0
+    lateness_mins: int = 0
+    early_exit_mins: int = 0
+    calculation_breakdown: List[str] = Field(default_factory=list)
+    is_valid: bool = False
+    validation_errors: List[str] = []
+
+class TimesheetPreviewResponse(BaseModel):
+    total_rows: int
+    valid_rows: int
+    invalid_rows: int
+    data: List[TimesheetPreviewRow]
+
+class TimesheetConfirmRecord(BaseModel):
+    employment_id: uuid.UUID
+    work_date: date
+    clock_in: Optional[datetime] = None
+    clock_out: Optional[datetime] = None
+
+class TimesheetConfirmPayload(BaseModel):
+    entity_id: uuid.UUID
+    records: List[TimesheetConfirmRecord]
+
+class TimesheetConfirmResponse(BaseModel):
+    success_count: int
+    error_count: int
+    errors: List[dict] = []
