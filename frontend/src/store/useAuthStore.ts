@@ -8,6 +8,7 @@ interface User {
     selected_entity_id: string | null;
     is_platform_admin: boolean;
     is_tenant_admin: boolean;
+    setup_complete: boolean;
     display_name?: string;
     employment_id?: string;
 }
@@ -18,6 +19,7 @@ interface AuthState {
     isAuthenticated: boolean;
     login: (user: User, token: string) => void;
     setEntity: (entityId: string) => void;
+    completeSetup: () => void;
     logout: () => void;
 }
 
@@ -34,6 +36,11 @@ export const useAuthStore = create<AuthState>()(
             setEntity: (entityId) => {
                 set((state) => ({
                     user: state.user ? { ...state.user, selected_entity_id: entityId } : null
+                }));
+            },
+            completeSetup: () => {
+                set((state) => ({
+                    user: state.user ? { ...state.user, setup_complete: true } : null
                 }));
             },
             logout: async () => {

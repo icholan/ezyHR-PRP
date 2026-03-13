@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 class AuditLogBase(BaseModel):
     tenant_id: Optional[UUID] = None
@@ -27,6 +27,7 @@ class AuditLogRead(AuditLogBase):
 
 class SystemAuditLogBase(BaseModel):
     admin_id: Optional[UUID] = None
+    user_id: Optional[UUID] = None
     tenant_id: Optional[UUID] = None
     action: str
     ip_address: Optional[str] = None
@@ -41,3 +42,11 @@ class SystemAuditLogRead(SystemAuditLogBase):
 
     class Config:
         from_attributes = True
+
+class PaginatedAuditLogs(BaseModel):
+    items: List[AuditLogRead]
+    total: int
+
+class PaginatedSystemAuditLogs(BaseModel):
+    items: List[SystemAuditLogRead]
+    total: int

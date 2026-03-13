@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
+import OnboardingWizard from './pages/OnboardingWizard';
 import DashboardLayout from './components/Layout/DashboardLayout';
 import AdminLayout from './components/Layout/AdminLayout';
 import Dashboard from './pages/Dashboard';
@@ -46,9 +48,13 @@ function App() {
             <Routes>
                 {/* Public Routes */}
                 <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+
+                {/* Protected Setup Route */}
+                <Route path="/onboarding" element={<ProtectedRoute requireSetup={false}><OnboardingWizard /></ProtectedRoute>} />
 
                 {/* Protected Tenant Routes */}
-                <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+                <Route path="/" element={<ProtectedRoute requireSetup={true}><DashboardLayout /></ProtectedRoute>}>
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="dashboard" element={<Dashboard />} />
                     <Route path="employees" element={<Employees />} />

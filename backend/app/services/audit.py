@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from app.models.system import AuditLog, SystemAuditLog
 from app.schemas.audit import AuditLogCreate, SystemAuditLogCreate
 from typing import Optional, Dict, Any, List
@@ -71,15 +71,14 @@ class AuditService:
         """
         system_log = SystemAuditLog(
             admin_id=None, # For platform admins, we'd use a different flow or set this if applicable
+            user_id=user_id,
             tenant_id=tenant_id,
             action=action,
             ip_address=ip_address,
             details=details
         )
-        # Note: We use "admin_id" in the model for PlatformAdmins, 
-        # but for Tenant Users we might just rely on tenant_id + action details.
-        # If the user is a Tenant Admin logging in, they are still a 'user' in the users table.
-        # Actually, let's check the SystemAuditLog model again.
+        # Note: We use "admin_id" in the model for PlatformAdmins,
+        # and "user_id" for standard tenant users.
         
         db.add(system_log)
         return system_log
@@ -94,7 +93,7 @@ class AuditService:
         table_name: Optional[str] = None,
         skip: int = 0,
         limit: int = 100
-    ) -> List[AuditLog]:
+    ) -> Dict[str, Any]:
         query = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
         
         if entity_id:
@@ -106,9 +105,16 @@ class AuditService:
         if table_name:
             query = query.where(AuditLog.table_name == table_name)
             
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+        
         query = query.order_by(desc(AuditLog.created_at)).offset(skip).limit(limit)
         result = await db.execute(query)
-        return list(result.scalars().all())
+        
+        return {
+            "items": list(result.scalars().all()),
+            "total": total or 0
+        }
 
     @staticmethod
     async def get_system_logs(
@@ -117,12 +123,19 @@ class AuditService:
         action: Optional[str] = None,
         skip: int = 0,
         limit: int = 100
-    ) -> List[SystemAuditLog]:
+    ) -> Dict[str, Any]:
         query = select(SystemAuditLog).where(SystemAuditLog.tenant_id == tenant_id)
         
         if action:
             query = query.where(SystemAuditLog.action == action)
             
+        count_query = select(func.count()).select_from(query.subquery())
+        total = await db.scalar(count_query)
+        
         query = query.order_by(desc(SystemAuditLog.created_at)).offset(skip).limit(limit)
         result = await db.execute(query)
-        return list(result.scalars().all())
+        
+        return {
+            "items": list(result.scalars().all()),
+            "total": total or 0
+        }

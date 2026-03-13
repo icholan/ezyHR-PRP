@@ -46,11 +46,13 @@ class UserRead(UserBase):
     id: UUID
     tenant_id: UUID
     two_fa_enabled: bool
+    setup_complete: Optional[bool] = False
     last_login: Optional[datetime] = None
     created_at: datetime
     entity_access: Optional[List[UserEntityAccessRead]] = []
     display_name: Optional[str] = None
     employment_id: Optional[UUID] = None
+    selected_entity_id: Optional[UUID] = None
     
     class Config:
         from_attributes = True

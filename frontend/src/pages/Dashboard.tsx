@@ -3,23 +3,52 @@ import { motion } from 'framer-motion';
 import { Users, Wallet, CalendarClock, ShieldAlert, TrendingUp, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 
-const stats = [
-    { label: 'Total Employees', value: '1,284', change: '+12', trend: 'up', icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-    { label: 'Active Payroll', value: '$452,000', change: '+2.4%', trend: 'up', icon: Wallet, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-    { label: 'Leave Requests', value: '24', change: '-5', trend: 'down', icon: CalendarClock, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-    { label: 'AI Audit Flags', value: '3', change: 'Critical', trend: 'neutral', icon: ShieldAlert, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-900/20' },
-];
+import api from '../services/api';
+
+const statStyles: Record<string, any> = {
+    'Total Employees': { icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+    'Active Payroll': { icon: Wallet, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+    'Pending Leaves': { icon: CalendarClock, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
+    'Recent Events': { icon: ShieldAlert, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-900/20' }
+};
+
+interface StatCard {
+    label: string;
+    value: string;
+    change: string;
+    trend: string;
+}
+
+interface AuditFlag {
+    type: string;
+    msg: string;
+    severity: string;
+}
+
+interface DashboardData {
+    stats: StatCard[];
+    audit_flags: AuditFlag[];
+}
 
 const Dashboard = () => {
     const user = useAuthStore((state) => state.user);
     const [loading, setLoading] = useState(false);
+    const [data, setData] = useState<DashboardData | null>(null);
 
     useEffect(() => {
-        if (user?.selected_entity_id) {
-            setLoading(true);
-            const timer = setTimeout(() => setLoading(false), 500);
-            return () => clearTimeout(timer);
-        }
+        const fetchDashboardData = async () => {
+            if (!user?.selected_entity_id) return;
+            try {
+                setLoading(true);
+                const res = await api.get('/api/v1/dashboard/stats');
+                setData(res.data);
+            } catch (error) {
+                console.error("Failed to fetch dashboard data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchDashboardData();
     }, [user?.selected_entity_id]);
 
     if (loading) {
@@ -46,31 +75,35 @@ const Dashboard = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                {stats.map((stat, i) => (
-                    <motion.div
-                        key={stat.label}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        className="bg-white dark:bg-gray-900 p-5 sm:p-6 rounded-[24px] border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow group"
-                    >
-                        <div className="flex items-center justify-between mb-4">
-                            <div className={`${stat.bg} ${stat.color} w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110`}>
-                                <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                {(data?.stats || []).map((stat, i) => {
+                    const style = statStyles[stat.label] || statStyles['Recent Events'];
+                    const Icon = style.icon;
+                    return (
+                        <motion.div
+                            key={stat.label}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.1 }}
+                            className="bg-white dark:bg-gray-900 p-5 sm:p-6 rounded-[24px] border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md dark:hover:shadow-gray-900/50 transition-shadow group"
+                        >
+                            <div className="flex items-center justify-between mb-4">
+                                <div className={`${style.bg} ${style.color} w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110`}>
+                                    <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                                </div>
+                                <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-full ${stat.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' :
+                                    stat.trend === 'down' ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20' :
+                                        'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800'
+                                    }`}>
+                                    {stat.trend === 'up' && <ArrowUpRight className="w-3 h-3" />}
+                                    {stat.trend === 'down' && <ArrowDownRight className="w-3 h-3" />}
+                                    {stat.change}
+                                </div>
                             </div>
-                            <div className={`flex items-center gap-1 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-full ${stat.trend === 'up' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' :
-                                stat.trend === 'down' ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20' :
-                                    'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20'
-                                }`}>
-                                {stat.trend === 'up' && <ArrowUpRight className="w-3 h-3" />}
-                                {stat.trend === 'down' && <ArrowDownRight className="w-3 h-3" />}
-                                {stat.change}
-                            </div>
-                        </div>
-                        <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm font-medium">{stat.label}</p>
-                        <h3 className="text-xl sm:text-2xl font-bold text-dark-900 dark:text-gray-100 mt-1">{stat.value}</h3>
-                    </motion.div>
-                ))}
+                            <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm font-medium">{stat.label}</p>
+                            <h3 className="text-xl sm:text-2xl font-bold text-dark-900 dark:text-gray-100 mt-1">{stat.value}</h3>
+                        </motion.div>
+                    );
+                })}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
@@ -102,11 +135,9 @@ const Dashboard = () => {
                 <div className="bg-dark-950 dark:bg-gray-900 rounded-[24px] sm:rounded-[32px] p-6 sm:p-8 text-white relative overflow-hidden border border-transparent dark:border-gray-800">
                     <h2 className="text-lg sm:text-xl font-bold mb-6">Recent AI Audit Flags</h2>
                     <div className="space-y-4 relative z-10">
-                        {[
-                            { type: 'Salary Spike', msg: '25% increase for User #1024', severity: 'high' },
-                            { type: 'Missing CPF', msg: 'Admin User missing deduction', severity: 'medium' },
-                            { type: 'Ghost Check', msg: 'Shared bank account detected', severity: 'critical' },
-                        ].map((flag, i) => (
+                        {data?.audit_flags.length === 0 ? (
+                            <p className="text-sm text-white/60 italic">No recent critical events detected.</p>
+                        ) : (data?.audit_flags || []).map((flag, i) => (
                             <div key={i} className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors cursor-pointer group">
                                 <div className="flex items-center justify-between mb-1">
                                     <span className={`text-[10px] font-bold uppercase tracking-wider ${flag.severity === 'critical' ? 'text-rose-400' : 'text-amber-400'

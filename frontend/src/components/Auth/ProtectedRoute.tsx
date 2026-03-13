@@ -6,9 +6,10 @@ interface ProtectedRouteProps {
     children: React.ReactNode;
     requireAdmin?: boolean;
     requirePlatformAdmin?: boolean;
+    requireSetup?: boolean;
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false, requirePlatformAdmin = false }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false, requirePlatformAdmin = false, requireSetup }) => {
     const { isAuthenticated, user } = useAuthStore();
     const location = useLocation();
 
@@ -21,6 +22,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin 
     }
 
     if (requireAdmin && !requirePlatformAdmin && !user?.is_platform_admin && !user?.is_tenant_admin) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    // Traps new admins in the onboarding wizard
+    if (requireSetup === true && user?.is_tenant_admin && !user?.setup_complete) {
+        return <Navigate to="/onboarding" replace />;
+    }
+    
+    // Prevents already-onboarded admins from returning to the wizard
+    if (requireSetup === false && user?.setup_complete) {
         return <Navigate to="/dashboard" replace />;
     }
 

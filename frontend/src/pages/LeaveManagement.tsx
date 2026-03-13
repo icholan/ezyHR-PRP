@@ -241,10 +241,18 @@ const LeaveManagement = () => {
 
         const empId = formData.employment_id || user?.employment_id || "c85569f9-dad1-4973-a3b1-cba216a78a9d";
         try {
-            const res = await api.post('/api/v1/leave/apply', {
+            const payload: any = {
                 ...formData,
                 employment_id: empId
-            });
+            };
+
+            // Clean up empty strings so Pydantic validation doesn't fail
+            if (!payload.reason) delete payload.reason;
+            if (!payload.attachment_url) delete payload.attachment_url;
+            if (!payload.child_birth_date) delete payload.child_birth_date;
+            if (!payload.child_order) delete payload.child_order;
+
+            const res = await api.post('/api/v1/leave/apply', payload);
 
             if (res.data.status === 'success') {
                 setShowApplyModal(false);

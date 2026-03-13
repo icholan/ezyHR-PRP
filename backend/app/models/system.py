@@ -33,6 +33,7 @@ class SystemAuditLog(Base, IDMixin):
     __tablename__ = "system_audit_logs"
 
     admin_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("platform_admins.id"), nullable=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True)
     action: Mapped[str] = mapped_column(String(50), nullable=False) # e.g. LOGIN, SUSPEND_TENANT, EXTEND_TRIAL
     ip_address: Mapped[str] = mapped_column(String(50), nullable=True)

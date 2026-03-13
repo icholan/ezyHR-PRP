@@ -27,8 +27,15 @@ class Token(BaseModel):
     user: Optional[Union[UserRead, PlatformAdminResponse]] = None
 
 class TokenData(BaseModel):
-    user_id: Optional[str] = None
-    role: Optional[str] = None
+    user_id: UUID
+    tenant_id: Optional[UUID] = None
+    is_admin: bool = False
+
+class TenantSignupRequest(BaseModel):
+    company_name: str
+    admin_full_name: str
+    admin_email: EmailStr
+    admin_password: str
     type: Optional[str] = None
 
 class LoginRequest(BaseModel):

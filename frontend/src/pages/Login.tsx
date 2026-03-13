@@ -4,6 +4,7 @@ import { Shield, Lock, Mail, ChevronRight, CheckCircle2, Building2, AlertCircle 
 import api from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { clsx } from 'clsx';
+import { Link } from 'react-router-dom';
 
 const Login = () => {
     const [step, setStep] = useState(1);
@@ -227,6 +228,15 @@ const Login = () => {
                                         </>
                                     )}
                                 </button>
+                                
+                                {!isAdmin && (
+                                    <div className="mt-6 text-center text-sm">
+                                        <span className="text-gray-600 dark:text-gray-400">Don't have an account? </span>
+                                        <Link to="/signup" className="font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300">
+                                            Sign up for free
+                                        </Link>
+                                    </div>
+                                )}
                             </motion.form>
                         ) : (
                             <motion.form

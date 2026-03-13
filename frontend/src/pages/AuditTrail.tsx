@@ -52,16 +52,29 @@ const AuditTrail = () => {
         searchTerm: ''
     });
 
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(20);
+    const [totalRows, setTotalRows] = useState(0);
+
     const fetchLogs = async () => {
         try {
             setLoading(true);
             const endpoint = auditType === 'data' ? '/api/v1/audit/data' : '/api/v1/audit/system';
-            const res = await api.get(endpoint);
+            const params: any = {
+                skip: (page - 1) * limit,
+                limit: limit
+            };
+
+            if (filters.action) params.action = filters.action;
+            if (auditType === 'data' && filters.tableName) params.table_name = filters.tableName;
+
+            const res = await api.get(endpoint, { params });
             if (auditType === 'data') {
-                setDataLogs(res.data);
+                setDataLogs(res.data.items || []);
             } else {
-                setSystemLogs(res.data);
+                setSystemLogs(res.data.items || []);
             }
+            setTotalRows(res.data.total || 0);
         } catch (error) {
             toast.error("Failed to fetch audit logs");
         } finally {
@@ -69,9 +82,14 @@ const AuditTrail = () => {
         }
     };
 
+    // Reset page to 1 when switching tabs
+    useEffect(() => {
+        setPage(1);
+    }, [auditType]);
+
     useEffect(() => {
         fetchLogs();
-    }, [auditType]);
+    }, [auditType, page, limit, filters.action, filters.tableName]);
 
     const getActionColor = (action: string) => {
         switch (action.toUpperCase()) {
@@ -143,8 +161,8 @@ const AuditTrail = () => {
             {/* Content Card */}
             <div className="bg-white dark:bg-gray-900 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
                 <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-center gap-4 flex-1">
-                        <div className="relative flex-1 max-w-md">
+                    <div className="flex flex-wrap items-center gap-4 flex-1">
+                        <div className="relative flex-1 min-w-[200px] max-w-md">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <input
                                 type="text"
@@ -153,6 +171,45 @@ const AuditTrail = () => {
                                 value={filters.searchTerm}
                                 onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
                             />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <Filter className="w-4 h-4 text-gray-400" />
+                            <select
+                                className="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary-500/20 outline-none cursor-pointer text-gray-600 dark:text-gray-300 font-medium"
+                                value={filters.action}
+                                onChange={(e) => setFilters({ ...filters, action: e.target.value })}
+                            >
+                                <option value="">All Actions</option>
+                                <option value="INSERT">Create (INSERT)</option>
+                                <option value="UPDATE">Update (UPDATE)</option>
+                                <option value="DELETE">Delete (DELETE)</option>
+                                {auditType === 'system' && (
+                                    <>
+                                        <option value="LOGIN">Login</option>
+                                        <option value="LOGOUT">Logout</option>
+                                    </>
+                                )}
+                            </select>
+
+                            {auditType === 'data' && (
+                                <select
+                                    className="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-none rounded-2xl text-sm focus:ring-2 focus:ring-primary-500/20 outline-none cursor-pointer text-gray-600 dark:text-gray-300 font-medium"
+                                    value={filters.tableName}
+                                    onChange={(e) => setFilters({ ...filters, tableName: e.target.value })}
+                                >
+                                    <option value="">All Tables</option>
+                                    <option value="employees">Employees</option>
+                                    <option value="users">Users</option>
+                                    <option value="leave_requests">Leave Requests</option>
+                                    <option value="attendance_records">Attendance records</option>
+                                    <option value="payroll_runs">Payroll runs</option>
+                                    <option value="entities">Entities</option>
+                                    <option value="masters">System Data (Masters)</option>
+                                    <option value="platform_admins">Platform Admins</option>
+                                    <option value="roles">Roles</option>
+                                </select>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -242,6 +299,50 @@ const AuditTrail = () => {
                             ))}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Footer */}
+                <div className="p-6 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 rounded-b-[32px]">
+                    <div className="flex items-center gap-2">
+                        <span>Show</span>
+                        <select
+                            className="bg-gray-50 dark:bg-gray-800 border-none rounded-lg px-2 py-1 outline-none focus:ring-2 focus:ring-primary-500/20 text-gray-700 dark:text-gray-300 font-medium"
+                            value={limit}
+                            onChange={(e) => setLimit(Number(e.target.value))}
+                        >
+                            <option value={10}>10</option>
+                            <option value={20}>20</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                        </select>
+                        <span>entries</span>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <span>
+                            Showing {totalRows === 0 ? 0 : ((page - 1) * limit) + 1} to {Math.min(page * limit, totalRows)} of {totalRows} records
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page === 1}
+                                className="px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors font-semibold"
+                            >
+                                Prev
+                            </button>
+                            <div className="px-3 font-semibold text-gray-900 dark:text-white">
+                                {page} / {Math.max(1, Math.ceil(totalRows / limit))}
+                            </div>
+                            <button
+                                onClick={() => setPage(p => p + 1)}
+                                disabled={totalRows === 0 || page >= Math.ceil(totalRows / limit)}
+                                className="px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors font-semibold"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
