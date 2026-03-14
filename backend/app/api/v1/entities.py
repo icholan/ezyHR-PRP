@@ -29,8 +29,18 @@ async def list_entities(
     if current_user.is_tenant_admin:
         query = select(Entity).where(Entity.tenant_id == current_user.tenant_id, Entity.is_active == True).offset(skip).limit(limit)
     else:
-        # TODO: Implement granular fetching if needed for non-admins
-        query = select(Entity).where(Entity.tenant_id == current_user.tenant_id, Entity.is_active == True).offset(skip).limit(limit)
+        from app.models.auth import UserEntityAccess
+        query = (
+            select(Entity)
+            .join(UserEntityAccess, UserEntityAccess.entity_id == Entity.id)
+            .where(
+                Entity.tenant_id == current_user.tenant_id,
+                Entity.is_active == True,
+                UserEntityAccess.user_id == current_user.id
+            )
+            .offset(skip)
+            .limit(limit)
+        )
         
     result = await db.execute(query)
     return result.scalars().all()

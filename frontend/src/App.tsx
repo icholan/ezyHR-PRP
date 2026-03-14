@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -40,6 +40,17 @@ import TimeClock from './pages/attendance/TimeClock';
 import AttendanceLogs from './pages/attendance/AttendanceLogs';
 import PunchHistory from './pages/attendance/PunchHistory';
 import ImportTimesheet from './pages/attendance/ImportTimesheet';
+import ESSDashboard from './pages/ESSDashboard';
+import MyProfile from './pages/MyProfile';
+import MyLeaves from './pages/MyLeaves';
+import MyPayslips from './pages/MyPayslips';
+import { useAuthStore } from './store/useAuthStore';
+
+const TenantIndexRedirect = () => {
+    const { user } = useAuthStore();
+    const hasAdminAccess = user?.is_tenant_admin || (user?.entity_access && user.entity_access.some(a => a.role_name !== 'Employee'));
+    return <Navigate to={hasAdminAccess ? "/dashboard" : "/me"} replace />;
+};
 
 function App() {
     return (
@@ -55,34 +66,42 @@ function App() {
 
                 {/* Protected Tenant Routes */}
                 <Route path="/" element={<ProtectedRoute requireSetup={true}><DashboardLayout /></ProtectedRoute>}>
-                    <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="dashboard" element={<Dashboard />} />
-                    <Route path="employees" element={<Employees />} />
-                    <Route path="employees/multi-management" element={<MultiEntityManagement />} />
-                    <Route path="employees/add" element={<AddEmployee />} />
-                    <Route path="employees/:id" element={<EmployeeProfile />} />
-                    <Route path="payroll" element={<Payroll />} />
-                    <Route path="payroll/new" element={<PayrollNew />} />
-                    <Route path="payroll/:id" element={<PayrollDetail />} />
-                    <Route path="payroll/:id/payslip/:record_id" element={<Payslip />} />
-                    <Route path="ket" element={<KETDashboard />} />
-                    <Route path="ket/:id" element={<KETEditor />} />
+                    <Route index element={<TenantIndexRedirect />} />
+                    <Route path="me" element={<ESSDashboard />} />
+                    <Route path="profile" element={<MyProfile />} />
+                    <Route path="me/payslips" element={<MyPayslips />} />
+                    <Route path="me/payslips/:record_id" element={<Payslip />} />
                     <Route path="leave" element={<Navigate to="/leave/my" replace />} />
-                    <Route path="leave/my" element={<LeaveManagement />} />
-                    <Route path="attendance/leave/team" element={<LeaveManagement />} />
+                    <Route path="leave/my" element={<MyLeaves />} />
                     <Route path="attendance/clock" element={<TimeClock />} />
                     <Route path="attendance/history" element={<PunchHistory />} />
-                    <Route path="attendance/logs" element={<AttendanceLogs />} />
-                    <Route path="attendance/roster" element={<RosterManagement />} />
-                    <Route path="attendance/import" element={<ImportTimesheet />} />
-                    <Route path="attendance/public-holidays" element={<PublicHolidays />} />
-                    <Route path="audit" element={<AuditTrail />} />
-                    <Route path="reports" element={<Reports />} />
-                    <Route path="settings/users" element={<UserSettings />} />
-                    <Route path="settings/entities" element={<EntityManagement />} />
-                    <Route path="settings/roles" element={<RoleManagement />} />
-                    <Route path="settings/master" element={<MasterDataSettings />} />
-                    <Route path="settings/shifts" element={<ShiftSettings />} />
+
+                    {/* Admin Only Routes */}
+                    <Route element={<ProtectedRoute requireAdmin={true}><Outlet /></ProtectedRoute>}>
+                        <Route path="dashboard" element={<Dashboard />} />
+                        <Route path="employees" element={<Employees />} />
+                        <Route path="employees/multi-management" element={<MultiEntityManagement />} />
+                        <Route path="employees/add" element={<AddEmployee />} />
+                        <Route path="employees/:id" element={<EmployeeProfile />} />
+                        <Route path="payroll" element={<Payroll />} />
+                        <Route path="payroll/new" element={<PayrollNew />} />
+                        <Route path="payroll/:id" element={<PayrollDetail />} />
+                        <Route path="payroll/:id/payslip/:record_id" element={<Payslip />} />
+                        <Route path="ket" element={<KETDashboard />} />
+                        <Route path="ket/:id" element={<KETEditor />} />
+                        <Route path="attendance/leave/team" element={<LeaveManagement />} />
+                        <Route path="attendance/logs" element={<AttendanceLogs />} />
+                        <Route path="attendance/roster" element={<RosterManagement />} />
+                        <Route path="attendance/import" element={<ImportTimesheet />} />
+                        <Route path="attendance/public-holidays" element={<PublicHolidays />} />
+                        <Route path="audit" element={<AuditTrail />} />
+                        <Route path="reports" element={<Reports />} />
+                        <Route path="settings/users" element={<UserSettings />} />
+                        <Route path="settings/entities" element={<EntityManagement />} />
+                        <Route path="settings/roles" element={<RoleManagement />} />
+                        <Route path="settings/master" element={<MasterDataSettings />} />
+                        <Route path="settings/shifts" element={<ShiftSettings />} />
+                    </Route>
                 </Route>
 
                 {/* Protected Platform Admin Routes */}

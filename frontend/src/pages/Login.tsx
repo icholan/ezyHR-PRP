@@ -48,7 +48,16 @@ const Login = () => {
                 loginToStore(response.data.user, response.data.access_token);
                 // Use a more robust check for redirection
                 const isPlatform = response.data.user?.is_platform_admin;
-                window.location.href = isPlatform ? '/admin' : '/dashboard';
+                const isTenantAdmin = response.data.user?.is_tenant_admin;
+                const hasAdminAccess = isTenantAdmin || (response.data.user?.entity_access && response.data.user.entity_access.some((a: any) => a.role_name !== 'Employee'));
+
+                if (isPlatform) {
+                    window.location.href = '/admin';
+                } else if (!hasAdminAccess) {
+                    window.location.href = '/me';
+                } else {
+                    window.location.href = '/dashboard';
+                }
             }
         } catch (err: any) {
             console.error('Login error:', err.response?.data);
@@ -78,7 +87,16 @@ const Login = () => {
             const response = await api.post(verifyPath, payload);
             loginToStore(response.data.user, response.data.access_token);
             const isPlatform = response.data.user?.is_platform_admin;
-            window.location.href = isPlatform ? '/admin' : '/dashboard';
+            const isTenantAdmin = response.data.user?.is_tenant_admin;
+            const hasAdminAccess = isTenantAdmin || (response.data.user?.entity_access && response.data.user.entity_access.some((a: any) => a.role_name !== 'Employee'));
+
+            if (isPlatform) {
+                window.location.href = '/admin';
+            } else if (!hasAdminAccess) {
+                window.location.href = '/me';
+            } else {
+                window.location.href = '/dashboard';
+            }
         } catch (err: any) {
             setError(err.response?.data?.detail || 'Invalid MFA code');
         } finally {

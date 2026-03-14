@@ -30,6 +30,7 @@ class Role(Base, IDMixin, TimestampMixin):
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[str] = mapped_column(String(200), nullable=True)
+    permissions: Mapped[list["RolePermission"]] = relationship()
 
 class RolePermission(Base):
     __tablename__ = "role_permissions"
@@ -47,3 +48,5 @@ class UserEntityAccess(Base, IDMixin, TimestampMixin):
     managed_group_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
     granted_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    role: Mapped["Role"] = relationship()

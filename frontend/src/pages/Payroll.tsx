@@ -19,6 +19,9 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { clsx } from 'clsx';
+import { hasPermission } from '../utils/permissions';
+import { Permission } from '../types/permissions';
+
 
 const Payroll = () => {
     const navigate = useNavigate();
@@ -38,6 +41,8 @@ const Payroll = () => {
         const fetchPayrollData = async () => {
             if (!entityId) return;
             try {
+                setLoading(true);
+                setRuns([]); // Clear stale data
                 // In a real app, we'd have a specific list endpoint
                 // For now, we fetch current runs
                 const response = await api.get(`/api/v1/payroll/runs?entity_id=${entityId}`);
@@ -79,13 +84,15 @@ const Payroll = () => {
                     <h1 className="text-3xl font-bold text-dark-950 dark:text-gray-50 font-['Outfit']">Payroll Management</h1>
                     <p className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Process monthly salaries and review compliance audits.</p>
                 </div>
-                <button
-                    onClick={() => navigate('/payroll/new')}
-                    className="btn btn-primary flex items-center gap-2 py-3 px-6 shadow-lg shadow-primary-200"
-                >
-                    <Plus className="w-5 h-5" />
-                    Initialize New Run
-                </button>
+                {hasPermission(user, Permission.RUN_PAYROLL, entityId) && (
+                    <button
+                        onClick={() => navigate('/payroll/new')}
+                        className="btn btn-primary flex items-center gap-2 py-3 px-6 shadow-lg shadow-primary-200"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Initialize New Run
+                    </button>
+                )}
             </div>
 
             {/* Stats Overview */}

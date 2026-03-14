@@ -16,8 +16,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
+import { usePermissions } from '../hooks/usePermissions';
+import { Permission } from '../types/permissions';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
+
 
 interface KETSummary {
     id: string;
@@ -40,11 +43,27 @@ const KETDashboard = () => {
 
     const user = useAuthStore((state) => state.user);
     const entityId = user?.selected_entity_id;
+    const { hasPermission } = usePermissions();
+
+    if (!hasPermission(Permission.MANAGE_KET)) {
+        return (
+            <div className="p-12 text-center bg-white dark:bg-gray-900 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/10">
+                <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <FileText className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Access Denied</h3>
+                <p className="mt-2 text-gray-500 dark:text-gray-400 max-w-sm mx-auto">You do not have permission to manage Key Employment Terms (KET).</p>
+            </div>
+        );
+    }
+
 
     useEffect(() => {
         const fetchDashboard = async () => {
             try {
                 setLoading(true);
+                setItems([]); // Clear stale data
+                setStats({ total: 0, draft: 0, issued: 0, signed: 0, pending: 0 });
                 const response = await api.get(`/api/v1/ket/dashboard?entity_id=${entityId || ''}`);
                 setStats(response.data.stats);
                 setItems(response.data.items);

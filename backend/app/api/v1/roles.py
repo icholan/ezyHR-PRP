@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Dict
 import uuid
 
 from app.core.database import get_db
@@ -26,19 +26,41 @@ async def list_roles(
     result = await db.execute(query)
     roles = result.scalars().all()
     
-    # Needs to fetch permissions manually since joining in async is tricky without defined relationships
-    # Let's write a quick loop for now
-    roles_with_perms = []
+    # Needs to fetch permissions and usage statistics manually
+    from app.models.tenant import Entity
+    from app.models.auth import UserEntityAccess, RolePermission
+    from sqlalchemy import func
+
+    roles_with_data = []
     for role in roles:
+        # Fetch Permissions
         perm_query = select(RolePermission.permission).where(RolePermission.role_id == role.id)
         perm_result = await db.execute(perm_query)
         permissions = perm_result.scalars().all()
         
+        # Fetch Usage Stats
+        usage_query = (
+            select(
+                Entity.id.label("entity_id"),
+                Entity.name.label("entity_name"),
+                func.count(UserEntityAccess.user_id).label("user_count")
+            )
+            .join(UserEntityAccess, UserEntityAccess.entity_id == Entity.id)
+            .where(UserEntityAccess.role_id == role.id)
+            .group_by(Entity.id, Entity.name)
+        )
+        usage_result = await db.execute(usage_query)
+        usage_stats = usage_result.all()
+        
         role_data = role.__dict__.copy()
         role_data['permissions'] = permissions
-        roles_with_perms.append(role_data)
+        role_data['usage'] = [
+            {"entity_id": row.entity_id, "entity_name": row.entity_name, "user_count": row.user_count}
+            for row in usage_stats
+        ]
+        roles_with_data.append(role_data)
         
-    return roles_with_perms
+    return roles_with_data
 
 @router.post("", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
 async def create_role(
@@ -80,6 +102,7 @@ async def create_role(
     # Return structure matching RoleRead
     role_data = db_role.__dict__.copy()
     role_data['permissions'] = role_in.permissions
+    role_data['usage'] = []
     return role_data
 
 @router.put("/{role_id}", response_model=RoleRead)
@@ -143,6 +166,7 @@ async def update_role(
     
     role_data = db_role.__dict__.copy()
     role_data['permissions'] = permissions
+    role_data['usage'] = [] # Simplified for update response
     return role_data
 
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)

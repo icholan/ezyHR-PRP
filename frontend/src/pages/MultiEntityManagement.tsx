@@ -18,6 +18,10 @@ import { useNavigate } from 'react-router-dom';
 import DatePicker from '../components/DatePicker';
 import SearchableSelect from '../components/Common/SearchableSelect';
 import { useAuthStore } from '../store/useAuthStore';
+import { usePermissions } from '../hooks/usePermissions';
+import { Permission } from '../types/permissions';
+import AccessDenied from '../components/Common/AccessDenied';
+
 
 interface Person {
     id: string;
@@ -42,6 +46,8 @@ interface Employment {
 const MultiEntityManagement = () => {
     const navigate = useNavigate();
     const { setEntity } = useAuthStore();
+    const { hasPermission } = usePermissions();
+
     const [persons, setPersons] = useState<Person[]>([]);
     const [entities, setEntities] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -55,8 +61,11 @@ const MultiEntityManagement = () => {
     const [loadingEmployments, setLoadingEmployments] = useState(false);
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        if (hasPermission(Permission.MANAGE_MULTI_ENTITY)) {
+            fetchData();
+        }
+    }, [hasPermission]);
+
 
     const fetchData = async () => {
         try {
@@ -127,8 +136,16 @@ const MultiEntityManagement = () => {
         p.full_name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    if (!hasPermission(Permission.MANAGE_MULTI_ENTITY)) {
+        return <AccessDenied 
+            title="Multi-Entity Access Restricted" 
+            message="Your current role does not have the 'Multi-Entity Management' capability required to link profiles across companies. Please contact HR or a System Admin to request access."
+        />;
+    }
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>

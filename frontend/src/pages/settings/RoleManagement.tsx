@@ -5,8 +5,11 @@ import {
     Plus, Pencil, Trash2, ShieldAlert, X,
     Shield, Search, CheckCircle2, ChevronRight,
     Users, Lock, Layout, Activity,
-    Eye, Edit, Trash
+    Eye, Edit, Trash, Building2, ShieldCheck, BookOpen, FileText
+
 } from 'lucide-react';
+
+
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -15,13 +18,20 @@ interface Role {
     name: string;
     description: string;
     permissions: string[];
+    usage: {
+        entity_id: string;
+        entity_name: string;
+        user_count: number;
+    }[];
 }
 
 const AVAILABLE_PERMISSIONS = [
     { id: 'view_employees', label: 'View Employees', group: 'Employee Management', icon: Users },
     { id: 'edit_employees', label: 'Edit Employees', group: 'Employee Management', icon: Edit },
     { id: 'delete_employees', label: 'Delete Employees', group: 'Employee Management', icon: Trash },
+    { id: 'manage_ket', label: 'KET Management', group: 'Employee Management', icon: FileText },
     { id: 'view_payroll', label: 'View Payroll', group: 'Payroll', icon: Eye },
+
     { id: 'run_payroll', label: 'Run Payroll', group: 'Payroll', icon: Activity },
     { id: 'approve_payroll', label: 'Approve Payroll', group: 'Payroll', icon: CheckCircle2 },
     { id: 'view_attendance', label: 'View Attendance', group: 'Attendance', icon: Eye },
@@ -30,9 +40,14 @@ const AVAILABLE_PERMISSIONS = [
     { id: 'view_leave', label: 'View Leave', group: 'Leave Management', icon: Eye },
     { id: 'approve_leave', label: 'Approve Leave', group: 'Leave Management', icon: CheckCircle2 },
     { id: 'manage_leave_types', label: 'Manage Leave Types', group: 'Leave Management', icon: Layout },
+    { id: 'manage_team_leave', label: 'Manage Team Leave & Entitlements', group: 'Leave Management', icon: ShieldCheck },
+
     { id: 'view_reports', label: 'View Reports', group: 'System', icon: Eye },
     { id: 'manage_roles', label: 'Manage Roles', group: 'System', icon: Lock },
+    { id: 'manage_multi_entity', label: 'Multi-Entity Management', group: 'System', icon: Building2 },
+    { id: 'manage_master_data', label: 'Master Data Management', group: 'System', icon: BookOpen },
 ];
+
 
 const RoleManagement: React.FC = () => {
     const { user: currentUser } = useAuthStore();
@@ -234,6 +249,33 @@ const RoleManagement: React.FC = () => {
                                         )}
                                         {role.permissions.length === 0 && (
                                             <span className="text-xs text-gray-400 dark:text-gray-500 italic py-2">No permissions assigned</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Multi-Entity Usage Section */}
+                                <div className="mt-6 pt-6 border-t border-gray-50 dark:border-gray-800">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded-md">
+                                            Distribution
+                                        </span>
+                                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-md">
+                                            {role.usage.reduce((sum, u) => sum + u.user_count, 0)} users
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {role.usage.length > 0 ? (
+                                            role.usage.map(u => (
+                                                <div key={u.entity_id} className="flex items-center justify-between group/usage">
+                                                    <div className="flex items-center gap-2 overflow-hidden">
+                                                        <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                                        <span className="text-xs font-medium text-gray-600 dark:text-gray-300 truncate">{u.entity_name}</span>
+                                                    </div>
+                                                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{u.user_count}</span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">Not utilized in any entity yet</p>
                                         )}
                                     </div>
                                 </div>

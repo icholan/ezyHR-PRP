@@ -33,6 +33,11 @@ class LeaveService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_primary_employment_id(self, person_id: uuid.UUID) -> Optional[uuid.UUID]:
+        query = select(Employment.id).where(Employment.person_id == person_id, Employment.is_active == True).limit(1)
+        res = await self.db.execute(query)
+        return res.scalar_one_or_none()
+
     # ─────────────────────────────────────────────
     # Tenure Helpers
     # ─────────────────────────────────────────────

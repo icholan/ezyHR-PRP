@@ -119,7 +119,8 @@ def require_permission(required_permission: str):
         )
         
         result = await db.execute(query)
-        has_permission = result.scalar_one_or_none()
+        has_permission = result.first()
+
         
         if not has_permission:
             raise HTTPException(
@@ -130,6 +131,58 @@ def require_permission(required_permission: str):
         return True
         
     return permission_checker
+
+async def has_permission_internal(
+    db: AsyncSession,
+    user: User,
+    entity_id: uuid.UUID,
+    required_permission: str
+) -> bool:
+    """
+    Internal helper to check permissions for a specific entity.
+    Returns True if allowed, otherwise False.
+    """
+    if user.is_tenant_admin:
+        return True
+
+    query = select(RolePermission).join(
+        Role, Role.id == RolePermission.role_id
+    ).join(
+        UserEntityAccess, UserEntityAccess.role_id == Role.id
+    ).where(
+        UserEntityAccess.user_id == user.id,
+        UserEntityAccess.entity_id == entity_id,
+        RolePermission.permission == required_permission
+    )
+    
+    result = await db.execute(query)
+    return result.first() is not None
+
+
+async def has_any_entity_permission(
+    db: AsyncSession,
+    user: User,
+    required_permission: str
+) -> bool:
+    """
+    Checks if a user has a specific permission in ANY entity belonging to their tenant.
+    """
+    if user.is_tenant_admin:
+        return True
+
+    query = select(RolePermission).join(
+        Role, Role.id == RolePermission.role_id
+    ).join(
+        UserEntityAccess, UserEntityAccess.role_id == Role.id
+    ).where(
+        UserEntityAccess.user_id == user.id,
+        RolePermission.permission == required_permission
+    )
+    
+    result = await db.execute(query)
+    return result.first() is not None
+
+
 
 async def get_current_platform_admin(
     token: str = Depends(oauth2_scheme),

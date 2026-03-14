@@ -12,6 +12,9 @@ import api from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { toast } from 'react-hot-toast';
 import { clsx } from 'clsx';
+import { hasPermission } from '../utils/permissions';
+import { Permission } from '../types/permissions';
+
 
 const PayrollNew = () => {
     const navigate = useNavigate();
@@ -33,6 +36,8 @@ const PayrollNew = () => {
 
     const currentYear = new Date().getFullYear();
     const years = [currentYear - 1, currentYear, currentYear + 1];
+
+    const canCreate = hasPermission(user, Permission.RUN_PAYROLL, user?.selected_entity_id);
 
     const handleCreate = async () => {
         if (!user?.selected_entity_id) {
@@ -139,20 +144,20 @@ const PayrollNew = () => {
                                 />
                             </div>
 
-                            <button
-                                onClick={handleCreate}
-                                disabled={loading}
-                                className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white rounded-2xl py-4 font-bold transition-all shadow-xl shadow-primary-200 flex items-center justify-center gap-2 group"
-                            >
-                                {loading ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <>
-                                        Initialize Batch
-                                        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                    </>
-                                )}
-                            </button>
+                                <button
+                                    onClick={handleCreate}
+                                    disabled={loading || !canCreate}
+                                    className="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white rounded-2xl py-4 font-bold transition-all shadow-xl shadow-primary-200 flex items-center justify-center gap-2 group"
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            {canCreate ? 'Initialize Batch' : 'Insufficient Permissions'}
+                                            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                        </>
+                                    )}
+                                </button>
                         </div>
                     </div>
                 </div>

@@ -19,14 +19,20 @@ import {
     TrendingUp
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
+import { usePermissions } from '../hooks/usePermissions';
+import { Permission } from '../types/permissions';
+import AccessDenied from '../components/Common/AccessDenied';
 import api from '../services/api';
+
 import SearchableSelect from '../components/Common/SearchableSelect';
 import DatePicker from '../components/DatePicker';
 
 const LeaveManagement = () => {
     const { user } = useAuthStore();
+    const { hasPermission } = usePermissions();
     const location = useLocation();
     const navigate = useNavigate();
+
 
     // Determine if we are in "My Leave" or "Team Leave" path
     const isTeamPath = location.pathname.includes('/team');
@@ -91,6 +97,8 @@ const LeaveManagement = () => {
     const fetchData = async () => {
         if (!user?.selected_entity_id) return;
         setLoading(true);
+        setBalances([]);
+        setRequests([]);
         // Placeholder Emp ID from seed
         const empId = user.employment_id || "c85569f9-dad1-4973-a3b1-cba216a78a9d";
         try {
@@ -116,6 +124,8 @@ const LeaveManagement = () => {
 
     const fetchManagementData = async () => {
         if (!user?.selected_entity_id) return;
+        setAllRequests([]);
+        setEmployees([]);
         try {
             const [reqRes, empRes] = await Promise.all([
                 api.get(`/api/v1/leave/requests?entity_id=${user.selected_entity_id}`),
@@ -130,6 +140,7 @@ const LeaveManagement = () => {
 
     const fetchEntitlementData = async () => {
         if (!user?.selected_entity_id) return;
+        setAllEntitlements([]);
         try {
             const res = await api.get(`/api/v1/leave/entitlements`, {
                 params: {
@@ -284,6 +295,17 @@ const LeaveManagement = () => {
         );
     }
 
+    // Guard Team path
+    if (isTeamPath && !hasPermission(Permission.MANAGE_TEAM_LEAVE)) {
+        return (
+            <AccessDenied 
+                title="Management Access Restricted" 
+                message="Your current role does not have the 'Manage Team Leave' capability. Please contact your administrator if you require access to review team requests or adjust entitlements."
+            />
+        );
+    }
+
+
     return (
         <div className={`max-w-[1200px] mx-auto p-8 ${!isTeamPath ? 'animate-in fade-in slide-in-from-bottom-4 duration-700' : ''}`}>
             {/* Header */}
@@ -328,8 +350,9 @@ const LeaveManagement = () => {
                         Apply for Leave
                     </button>
 
-                    {isTeamPath && user?.is_tenant_admin && (
+                    {isTeamPath && hasPermission(Permission.MANAGE_TEAM_LEAVE) && (
                         <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+
                             <button
                                 onClick={() => setViewMode('management')}
                                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all ${viewMode === 'management' ? 'bg-white dark:bg-gray-700 text-purple-600 shadow-sm' : 'text-gray-500'}`}

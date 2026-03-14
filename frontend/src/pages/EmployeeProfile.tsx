@@ -4,13 +4,17 @@ import {
     ChevronLeft, Edit3, Save, X, UserX, User, Briefcase,
     CreditCard, Mail, Phone, MapPin, Calendar, Building2,
     DollarSign, Shield, Clock, BadgeCheck, XCircle, AlertTriangle,
-    Plus, Trash2, Layers
+    Plus, Trash2, Layers, Send
 } from 'lucide-react';
 import api from '../services/api';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 import SearchableSelect from '../components/Common/SearchableSelect';
 import DatePicker from '../components/DatePicker';
+import { useAuthStore } from '../store/useAuthStore';
+import { hasPermission } from '../utils/permissions';
+import { Permission } from '../types/permissions';
+
 
 interface PersonDetail {
     id: string;
@@ -134,6 +138,8 @@ const formatDate = (d: string | null) => {
 const EmployeeProfile = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const { user } = useAuthStore();
+
 
     const [data, setData] = useState<EmployeeData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -145,6 +151,11 @@ const EmployeeProfile = () => {
     const [showYtdModal, setShowYtdModal] = useState(false);
     const [selectedYtd, setSelectedYtd] = useState<YTDDetail | null>(null);
     const [submittingYtd, setSubmittingYtd] = useState(false);
+
+    // Invite State
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [inviting, setInviting] = useState(false);
+    const [invitePassword, setInvitePassword] = useState<string | null>(null);
 
     // Editable copies
     const [editPerson, setEditPerson] = useState<Partial<PersonDetail>>({});
@@ -324,6 +335,22 @@ const EmployeeProfile = () => {
         }
     };
 
+    const handleInvite = async () => {
+        if (!data?.person?.id) return;
+        setInviting(true);
+        setInvitePassword(null);
+        try {
+            const resp = await api.post('/api/v1/employees/invite', { person_id: data.person.id });
+            setInvitePassword(resp.data.temporary_password);
+            toast.success('Employee invited successfully!');
+        } catch (err: any) {
+            console.error('Failed to invite employee', err);
+            toast.error(err.response?.data?.detail || 'Failed to invite employee.');
+        } finally {
+            setInviting(false);
+        }
+    };
+
     // Helper for editable fields
     const fieldValue = (section: 'person' | 'employment', key: string) => {
         if (editing) {
@@ -411,7 +438,7 @@ const EmployeeProfile = () => {
                         </>
                     ) : (
                         <>
-                            {employment.is_active && (
+                            {employment.is_active && hasPermission(user, Permission.DELETE_EMPLOYEES, employment.entity_id) && (
                                 <button
                                     onClick={() => setShowDeactivateModal(true)}
                                     className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-rose-200 dark:border-rose-800 transition-all text-sm"
@@ -420,13 +447,24 @@ const EmployeeProfile = () => {
                                     Deactivate
                                 </button>
                             )}
-                            <button
-                                onClick={enterEditMode}
-                                className="flex-1 sm:flex-none btn btn-primary flex items-center justify-center gap-2 py-2.5 px-6 shadow-lg shadow-primary-200 dark:shadow-primary-900/30 text-sm"
-                            >
-                                <Edit3 className="w-4 h-4" />
-                                Edit
-                            </button>
+                            {employment.is_active && hasPermission(user, Permission.EDIT_EMPLOYEES, employment.entity_id) && (
+                                <button
+                                    onClick={() => setShowInviteModal(true)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-bold font-premium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 transition-all text-sm"
+                                >
+                                    <Send className="w-4 h-4" />
+                                    Invite to Portal
+                                </button>
+                            )}
+                            {hasPermission(user, Permission.EDIT_EMPLOYEES, employment.entity_id) && (
+                                <button
+                                    onClick={enterEditMode}
+                                    className="flex-1 sm:flex-none btn btn-primary flex items-center justify-center gap-2 py-2.5 px-6 shadow-lg shadow-primary-200 dark:shadow-primary-900/30 text-sm"
+                                >
+                                    <Edit3 className="w-4 h-4" />
+                                    Edit
+                                </button>
+                            )}
                         </>
                     )}
                 </div>
@@ -1134,6 +1172,65 @@ const EmployeeProfile = () => {
                                 {submittingYtd ? "Saving..." : "Save Changes"}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Invite Modal */}
+            {showInviteModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl border border-gray-100 dark:border-gray-800 text-center relative">
+                        {!invitePassword ? (
+                            <>
+                                <div className="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-6">
+                                    <Send className="w-8 h-8" />
+                                </div>
+                                <h3 className="text-xl font-bold font-premium text-dark-950 dark:text-gray-50 mb-2">Invite to Self-Service Portal</h3>
+                                <p className="text-sm text-gray-500 mb-8">
+                                    This will create a secure login account for <strong>{person.full_name}</strong> and generate a temporary password.
+                                    They must have a valid email address configured in their profile.
+                                </p>
+                                <div className="flex items-center justify-center gap-3">
+                                    <button
+                                        onClick={() => setShowInviteModal(false)}
+                                        className="px-6 py-2.5 rounded-xl font-bold text-gray-600 hover:bg-gray-100 transition-all"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleInvite}
+                                        disabled={inviting}
+                                        className="btn flex-1 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
+                                    >
+                                        {inviting ? (
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            <>Generate Login</>
+                                        )}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-6">
+                                    <BadgeCheck className="w-8 h-8" />
+                                </div>
+                                <h3 className="text-xl font-bold font-premium text-dark-950 dark:text-gray-50 mb-2">Account Created!</h3>
+                                <p className="text-sm text-gray-500 mb-6">
+                                    Copy this temporary password and securely send it to the employee. They will be required to change it upon their first login.
+                                </p>
+                                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 mb-8 select-all">
+                                    <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Temporary Password</p>
+                                    <p className="text-2xl tracking-widest font-mono text-dark-950 dark:text-emerald-400 font-black">{invitePassword}</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowInviteModal(false)}
+                                    className="btn btn-primary w-full shadow-lg shadow-primary-200"
+                                >
+                                    Done
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

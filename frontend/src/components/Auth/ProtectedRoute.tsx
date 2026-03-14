@@ -21,8 +21,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin 
         return <Navigate to="/dashboard" replace />;
     }
 
-    if (requireAdmin && !requirePlatformAdmin && !user?.is_platform_admin && !user?.is_tenant_admin) {
-        return <Navigate to="/dashboard" replace />;
+    const hasAdminAccess = user?.is_tenant_admin || (user?.entity_access && user.entity_access.some(a => a.role_name !== 'Employee'));
+
+    if (requireAdmin && !requirePlatformAdmin && !user?.is_platform_admin && !hasAdminAccess) {
+        return <Navigate to="/me" replace />;
     }
 
     // Traps new admins in the onboarding wizard

@@ -88,8 +88,38 @@ async def get_leave_balances(
 ):
     if not year:
         year = date.today().year
+    
+    # Security: Only admins or the employee themselves can view
+    if not current_user.is_tenant_admin:
+        service_emp = LeaveService(db) # We'll check via employment later
+        # Actually easier to check person_id on the employment
+        from app.models.employment import Employment
+        res = await db.execute(select(Employment.person_id).where(Employment.id == employment_id))
+        person_id = res.scalar()
+        if person_id != current_user.person_id:
+            raise HTTPException(status_code=403, detail="Not authorized to view these balances")
+
     service = LeaveService(db)
     return await service.get_balances(employment_id, year)
+
+@router.get("/me/balances", response_model=List[LeaveBalanceRead])
+async def get_my_leave_balances(
+    year: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.person_id:
+        raise HTTPException(status_code=404, detail="No employee record associated with this user")
+    
+    service = LeaveService(db)
+    emp_id = await service.get_primary_employment_id(current_user.person_id)
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="No active employment found")
+        
+    if not year:
+        year = date.today().year
+        
+    return await service.get_balances(emp_id, year)
 
 
 # ─────────────────────────────────────────────
@@ -105,7 +135,18 @@ async def get_leave_requests(
     current_user: User = Depends(get_current_user)
 ):
     service = LeaveService(db)
+    
+    # Security check for employment_id
+    if employment_id and not current_user.is_tenant_admin:
+        from app.models.employment import Employment
+        res = await db.execute(select(Employment.person_id).where(Employment.id == employment_id))
+        person_id = res.scalar()
+        if person_id != current_user.person_id:
+            raise HTTPException(status_code=403, detail="Not authorized to view these requests")
+
     if entity_id:
+        if not current_user.is_tenant_admin:
+            raise HTTPException(status_code=403, detail="Admin only")
         return await service.get_entity_leave_requests(entity_id, status=status)
 
     query = select(LeaveRequest, LeaveType.name).join(LeaveType)
@@ -132,6 +173,57 @@ async def get_leave_requests(
             "created_at": req.created_at
         })
     return requests
+
+@router.get("/me/requests", response_model=List[dict])
+async def get_my_leave_requests(
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.person_id:
+        raise HTTPException(status_code=404, detail="No employee record associated with this user")
+        
+    service = LeaveService(db)
+    emp_id = await service.get_primary_employment_id(current_user.person_id)
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="No active employment found")
+        
+    return await get_leave_requests(employment_id=emp_id, status=status, db=db, current_user=current_user)
+
+@router.post("/me/apply", response_model=dict)
+async def apply_my_leave(
+    req_data: LeaveRequestCreate,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.person_id:
+        raise HTTPException(status_code=404, detail="No employee record associated with this user")
+        
+    service = LeaveService(db)
+    emp_id = await service.get_primary_employment_id(current_user.person_id)
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="No active employment found")
+        
+    # Override employment_id to ensure they only apply for themselves
+    req_data.employment_id = emp_id
+    
+    try:
+        request, conflicts = await service.apply_leave(
+            req_data, 
+            user_id=current_user.id, 
+            ip_address=req.client.host if req.client else None
+        )
+        await db.commit()
+        await db.refresh(request)
+        return {
+            "status": "success",
+            "request": LeaveRequestRead.model_validate(request).model_dump(mode="json"),
+            "conflicts": conflicts,
+            "message": "Leave applied successfully."
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/requests/{request_id}", response_model=dict)

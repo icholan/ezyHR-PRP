@@ -15,52 +15,59 @@ import {
     Key,
     Building2,
     BookOpen,
+    User,
     History as HistoryIcon,
     Link as LinkIcon
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { usePermissions } from '../../hooks/usePermissions';
+import { Permission } from '../../types/permissions';
+
 
 const menuGroups = [
     {
         title: 'General',
         items: [
-            { icon: LayoutDashboard, label: 'Overview', path: '/dashboard' },
+            { icon: LayoutDashboard, label: 'Overview', path: '/dashboard', isAdmin: true },
+            { icon: LayoutDashboard, label: 'My Dashboard', path: '/me', isEmployeeOnly: true, requiresEmployment: true },
+            { icon: User, label: 'My Profile', path: '/profile', requiresEmployment: true },
+            { icon: Wallet, label: 'My Payslips', path: '/me/payslips', isEmployeeOnly: true, requiresEmployment: true },
             { icon: ShieldCheck, label: 'Audit Trail', path: '/audit', isAdmin: true },
-            { icon: FileText, label: 'Reports', path: '/reports' },
+            { icon: FileText, label: 'Reports', path: '/reports', isAdmin: true },
         ]
     },
     {
         title: 'People & Payroll',
         items: [
-            { icon: Users, label: 'Employees', path: '/employees' },
+            { icon: Users, label: 'Employees', path: '/employees', isAdmin: true },
             { icon: LinkIcon, label: 'Multi-Entity Linking', path: '/employees/multi-management', isAdmin: true },
-            { icon: Wallet, label: 'Payroll', path: '/payroll' },
-            { icon: FileText, label: 'KET Management', path: '/ket' },
-            { icon: Calendar, label: 'My Leave', path: '/leave/my' },
+            { icon: Wallet, label: 'Payroll', path: '/payroll', isAdmin: true },
+            { icon: FileText, label: 'KET Management', path: '/ket', isAdmin: true },
+            { icon: Calendar, label: 'My Leave', path: '/leave/my', requiresEmployment: true },
         ]
     },
     {
         title: 'Time & Attendance',
         items: [
-            { icon: Clock, label: 'Time Clock', path: '/attendance/clock' },
-            { icon: HistoryIcon, label: 'Punch History', path: '/attendance/history' },
-            { icon: FileText, label: 'Attendance Logs', path: '/attendance/logs' },
-            { icon: FileText, label: 'Import Timesheet', path: '/attendance/import' },
-            { icon: Calendar, label: 'Roster', path: '/attendance/roster' },
-            { icon: Calendar, label: 'Public Holidays', path: '/attendance/public-holidays' },
+            { icon: Clock, label: 'Time Clock', path: '/attendance/clock', requiresEmployment: true },
+            { icon: HistoryIcon, label: 'Punch History', path: '/attendance/history', requiresEmployment: true },
+            { icon: FileText, label: 'Attendance Logs', path: '/attendance/logs', isAdmin: true },
+            { icon: FileText, label: 'Import Timesheet', path: '/attendance/import', isAdmin: true },
+            { icon: Calendar, label: 'Roster', path: '/attendance/roster', isAdmin: true },
+            { icon: Calendar, label: 'Public Holidays', path: '/attendance/public-holidays', isAdmin: true },
             { icon: ShieldCheck, label: 'Team Leave & Entitlement', path: '/attendance/leave/team', isAdmin: true },
         ]
     },
     {
         title: 'Configuration',
         items: [
-            { icon: Settings, label: 'Users', path: '/settings/users' },
-            { icon: Building2, label: 'Companies', path: '/settings/entities' },
-            { icon: Key, label: 'Roles', path: '/settings/roles' },
-            { icon: BookOpen, label: 'Master Data', path: '/settings/master' },
-            { icon: Clock, label: 'Shifts', path: '/settings/shifts' },
+            { icon: Settings, label: 'Users', path: '/settings/users', isAdmin: true },
+            { icon: Building2, label: 'Companies', path: '/settings/entities', isAdmin: true },
+            { icon: Key, label: 'Roles', path: '/settings/roles', isAdmin: true },
+            { icon: BookOpen, label: 'Master Data', path: '/settings/master', isAdmin: true },
+            { icon: Clock, label: 'Shifts', path: '/settings/shifts', isAdmin: true },
         ]
     }
 ];
@@ -71,8 +78,10 @@ interface SidebarProps {
 
 const Sidebar = ({ onClose }: SidebarProps) => {
     const { logout, user } = useAuthStore();
+    const { hasPermission } = usePermissions();
     const navigate = useNavigate();
     const [isCollapsed, setIsCollapsed] = useState(false);
+
 
     const handleLogout = () => {
         logout();
@@ -100,9 +109,22 @@ const Sidebar = ({ onClose }: SidebarProps) => {
                         <ShieldCheck className="w-6 h-6" />
                     </div>
                     {!isCollapsed && (
-                        <span className="font-['Outfit'] font-bold text-xl tracking-tight text-dark-900 dark:text-gray-100 whitespace-nowrap animate-in fade-in duration-300">
-                            ezyHR <span className="text-primary-600 dark:text-primary-400">V2</span>
-                        </span>
+                        <div className="flex flex-col">
+                            <span className="font-['Outfit'] font-bold text-xl tracking-tight text-dark-900 dark:text-gray-100 whitespace-nowrap animate-in fade-in duration-300">
+                                ezyHR <span className="text-primary-600 dark:text-primary-400">V2</span>
+                            </span>
+                            <div className="flex items-center gap-2 mt-1 animate-in fade-in slide-in-from-left-4 duration-500">
+                                <span className="text-[9px] font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/30 px-1.5 py-0.5 rounded-md uppercase tracking-widest whitespace-nowrap">
+                                    Pro Plan
+                                </span>
+                                <div className="flex-1 flex items-center gap-1.5">
+                                    <div className="w-8 h-1 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                                        <div className="bg-primary-500 h-full w-3/4 rounded-full" />
+                                    </div>
+                                    <span className="text-[8px] font-bold text-gray-400">75%</span>
+                                </div>
+                            </div>
+                        </div>
                     )}
                 </div>
                 {!isCollapsed && onClose && (
@@ -116,6 +138,7 @@ const Sidebar = ({ onClose }: SidebarProps) => {
             </div>
 
             <nav className="flex-1 px-3 space-y-6 overflow-y-auto overflow-x-hidden nice-scrollbar pb-6">
+
                 {menuGroups.map((group, groupIdx) => (
                     <div key={groupIdx} className="space-y-1">
                         {!isCollapsed && (
@@ -123,7 +146,32 @@ const Sidebar = ({ onClose }: SidebarProps) => {
                                 {group.title}
                             </h3>
                         )}
-                        {group.items.filter(item => !(item as any).isAdmin || user?.is_tenant_admin).map((item) => (
+                        {group.items.filter(item => {
+                            const hasAdminAccess = user?.is_tenant_admin || (user?.entity_access && user.entity_access.some(a => a.role_name !== 'Employee'));
+                            
+                            // Special case for Team Leave which now has a granular permission
+                            if (item.path === '/attendance/leave/team') {
+                                return hasPermission(Permission.MANAGE_TEAM_LEAVE);
+                            }
+
+                            // Special case for Master Data
+                            if (item.path === '/settings/master') {
+                                return hasPermission(Permission.MANAGE_MASTER_DATA);
+                            }
+
+                            // Special case for KET Management
+                            if (item.path === '/ket') {
+                                return hasPermission(Permission.MANAGE_KET);
+                            }
+
+                            if ((item as any).isAdmin && !hasAdminAccess) return false;
+
+
+                            if ((item as any).isEmployeeOnly && user?.is_tenant_admin) return false;
+                            if ((item as any).requiresEmployment && !user?.employment_id) return false;
+                            return true;
+                        }).map((item) => (
+
                             <NavLink
                                 key={item.path}
                                 to={item.path}
@@ -153,20 +201,8 @@ const Sidebar = ({ onClose }: SidebarProps) => {
             </nav>
 
             <div className={clsx("mt-auto", isCollapsed ? "p-3" : "p-4")}>
-                {!isCollapsed && (
-                    <div className="bg-dark-950 dark:bg-gray-800 rounded-2xl p-4 text-white mb-4 relative overflow-hidden group animate-in fade-in zoom-in duration-300">
-                        <div className="relative z-10">
-                            <p className="text-xs text-dark-300 dark:text-gray-400 mb-1">Current Plan</p>
-                            <p className="font-semibold mb-3">Enterprise Pro</p>
-                            <div className="w-full bg-dark-800 dark:bg-gray-700 h-1.5 rounded-full overflow-hidden">
-                                <div className="bg-primary-500 h-full w-3/4 rounded-full" />
-                            </div>
-                        </div>
-                        <div className="absolute top-[-20%] right-[-20%] w-24 h-24 bg-primary-500/20 rounded-full blur-2xl group-hover:bg-primary-500/30 transition-all" />
-                    </div>
-                )}
-
                 <button
+
                     onClick={handleLogout}
                     title={isCollapsed ? "Sign Out" : undefined}
                     className={clsx(

@@ -16,11 +16,17 @@ class RoleUpdate(BaseModel):
     description: Optional[str] = None
     permissions: Optional[List[Permission]] = None
 
+class RoleUsage(BaseModel):
+    entity_id: UUID
+    entity_name: str
+    user_count: int
+
 class RoleRead(RoleBase):
     id: UUID
     tenant_id: UUID
     created_at: datetime
-    permissions: List[str] # List of string permission names
+    permissions: List[str]
+    usage: List[RoleUsage] = [] # New: user counts per entity
     
     class Config:
         from_attributes = True

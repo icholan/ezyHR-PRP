@@ -25,9 +25,17 @@ interface AuditFlag {
     severity: string;
 }
 
+interface ComplianceAlert {
+    entity_id: string;
+    entity_name: string;
+    missing_fields: string[];
+}
+
+
 interface DashboardData {
     stats: StatCard[];
     audit_flags: AuditFlag[];
+    compliance_alerts: ComplianceAlert[];
 }
 
 const Dashboard = () => {
@@ -40,7 +48,10 @@ const Dashboard = () => {
             if (!user?.selected_entity_id) return;
             try {
                 setLoading(true);
-                const res = await api.get('/api/v1/dashboard/stats');
+                setData(null); // Clear stale data
+                const res = await api.get('/api/v1/dashboard/stats', {
+                    params: { entity_id: user.selected_entity_id }
+                });
                 setData(res.data);
             } catch (error) {
                 console.error("Failed to fetch dashboard data:", error);
@@ -74,7 +85,43 @@ const Dashboard = () => {
                 </button>
             </div>
 
+            {/* Compliance Alerts Section */}
+            {data?.compliance_alerts && data.compliance_alerts.length > 0 && user?.is_tenant_admin && (
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-[24px] p-6"
+                >
+                    <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                            <ShieldAlert className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-lg font-bold text-amber-900 dark:text-amber-100 mb-1">Entity Setup Incomplete</h3>
+                            <p className="text-sm text-amber-700 dark:text-amber-300 mb-4 font-medium">
+                                Some entities are missing critical compliance and banking details. This may cause issues with payroll and government submissions.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {data.compliance_alerts.map((alert) => (
+                                    <div key={alert.entity_id} className="bg-white/60 dark:bg-gray-900/60 p-4 rounded-xl border border-amber-200/50 dark:border-amber-900/20 backdrop-blur-sm shadow-sm">
+                                        <p className="font-bold text-amber-900 dark:text-amber-100 text-sm mb-2">{alert.entity_name}</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {alert.missing_fields.map((field) => (
+                                                <span key={field} className="text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                    {field}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+
                 {(data?.stats || []).map((stat, i) => {
                     const style = statStyles[stat.label] || statStyles['Recent Events'];
                     const Icon = style.icon;

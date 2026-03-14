@@ -41,6 +41,8 @@ const Employees = () => {
     useEffect(() => {
         const fetchEmployees = async () => {
             try {
+                setLoading(true);
+                setEmployees([]); // Clear stale data
                 const response = await api.get(`/api/v1/employees?entity_id=${entityId}`);
                 setEmployees(response.data);
             } catch (error) {
@@ -257,13 +259,27 @@ const Employees = () => {
                                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">{emp.employee_code || 'No Code'}</p>
                                 </div>
 
-                                <div className="mt-6 pt-6 border-t border-gray-50 dark:border-gray-800 flex flex-col items-center gap-2">
+                                <div className="mt-6 pt-6 border-t border-gray-50 dark:border-gray-800 flex flex-col items-center gap-3">
                                     <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                                         <Building className="w-4 h-4 text-primary-500" />
-                                        <span className="text-sm font-medium">{emp.department_name || 'Unassigned'}</span>
+                                        <span className="text-sm font-bold text-dark-900 dark:text-gray-100">{emp.department_name || 'Unassigned'}</span>
                                     </div>
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-1">{emp.job_title || 'No Title'}</p>
+                                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 line-clamp-1">{emp.job_title || 'No Title'}</p>
+                                    
+                                    <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
+                                        {emp.group_name && (
+                                            <span className="px-2.5 py-1 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg text-[10px] font-black uppercase tracking-wider border border-gray-100 dark:border-gray-700">
+                                                {emp.group_name}
+                                            </span>
+                                        )}
+                                        {emp.grade_name && (
+                                            <span className="px-2.5 py-1 bg-primary-50 dark:bg-primary-900/10 text-primary-600 dark:text-primary-400 rounded-lg text-[10px] font-black uppercase tracking-wider border border-primary-100/50 dark:border-primary-800/30">
+                                                {emp.grade_name}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
+
                             </motion.div>
                         ))}
                     </AnimatePresence>
@@ -276,8 +292,10 @@ const Employees = () => {
                                 <tr className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
                                     <th className="px-6 sm:px-8 py-4 sm:py-5 text-sm font-semibold text-gray-600 dark:text-gray-400">Employee</th>
                                     <th className="px-4 sm:px-6 py-4 sm:py-5 text-sm font-semibold text-gray-600 dark:text-gray-400">Department</th>
+                                    <th className="px-4 sm:px-6 py-4 sm:py-5 text-sm font-semibold text-gray-600 dark:text-gray-400">Grade & Group</th>
                                     <th className="px-4 sm:px-6 py-4 sm:py-5 text-sm font-semibold text-gray-600 dark:text-gray-400">Status</th>
                                     <th className="px-4 sm:px-6 py-4 sm:py-5 text-sm font-semibold text-gray-600 dark:text-gray-400">Join Date</th>
+
                                     <th className="px-6 sm:px-8 py-4 sm:py-5 text-sm font-semibold text-gray-600 dark:text-gray-400 text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -314,6 +332,13 @@ const Employees = () => {
                                             </div>
                                             <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{emp.job_title || 'No Title'}</p>
                                         </td>
+                                        <td className="px-4 sm:px-6 py-4 sm:py-5">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-xs font-bold text-dark-950 dark:text-gray-100">{emp.grade_name || '-'}</span>
+                                                <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider">{emp.group_name || 'No Group'}</p>
+                                            </div>
+                                        </td>
+
                                         <td className="px-4 sm:px-6 py-4 sm:py-5">
                                             <span className={clsx(
                                                 "inline-flex items-center px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider",

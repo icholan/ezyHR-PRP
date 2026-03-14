@@ -11,6 +11,12 @@ interface User {
     setup_complete: boolean;
     display_name?: string;
     employment_id?: string;
+    entity_access?: {
+        entity_id: string;
+        role_id: string;
+        role_name?: string;
+        permissions?: string[];
+    }[];
 }
 
 interface AuthState {

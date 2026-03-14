@@ -9,7 +9,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/useAuthStore';
+import { usePermissions } from '../../hooks/usePermissions';
+import { Permission } from '../../types/permissions';
 import toast from 'react-hot-toast';
+
 
 // Common types
 interface MasterItem {
@@ -202,8 +205,22 @@ const MasterDataSettings: React.FC = () => {
     }, [items, searchQuery]);
 
     const activeTabInfo = TABS.find(t => t.id === activeTab)!;
+    const { hasPermission } = usePermissions();
+
+    if (!hasPermission(Permission.MANAGE_MASTER_DATA)) {
+        return (
+            <div className="p-12 text-center bg-white dark:bg-gray-900 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/10">
+                <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <ShieldCheck className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Access Denied</h3>
+                <p className="mt-2 text-gray-500 dark:text-gray-400 max-w-sm mx-auto">You do not have permission to manage structural Master Data.</p>
+            </div>
+        );
+    }
 
     return (
+
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

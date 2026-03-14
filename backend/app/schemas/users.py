@@ -17,6 +17,8 @@ class UserEntityAccessRead(UserEntityAccessBase):
     user_id: UUID
     granted_by: Optional[UUID] = None
     granted_at: datetime
+    role_name: Optional[str] = None
+    permissions: List[str] = []
     
     class Config:
         from_attributes = True

@@ -19,12 +19,18 @@ import {
 import api from '../services/api';
 import { clsx } from 'clsx';
 import { toast } from 'react-hot-toast';
+import { useAuthStore } from '../store/useAuthStore';
+import { hasPermission } from '../utils/permissions';
+import { Permission } from '../types/permissions';
+
 
 const PayrollDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [run, setRun] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const user = useAuthStore(state => state.user);
+
 
     const fetchDetail = async () => {
         setLoading(true);
@@ -148,7 +154,7 @@ const PayrollDetail = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    {run.status === 'approved' && (
+                    {run.status === 'approved' && hasPermission(user, Permission.VIEW_PAYROLL, run.entity_id) && (
                         <div className="flex items-center bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
                             <button
                                 onClick={() => handleExport('cpf91')}
@@ -166,7 +172,7 @@ const PayrollDetail = () => {
                             </button>
                         </div>
                     )}
-                    {run.status === 'processed' && (
+                    {run.status === 'processed' && hasPermission(user, Permission.APPROVE_PAYROLL, run.entity_id) && (
                         <button
                             onClick={handleApprove}
                             className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200"
@@ -175,7 +181,7 @@ const PayrollDetail = () => {
                             Approve
                         </button>
                     )}
-                    {(run.status === 'draft' || !run.records || run.records.length === 0) && (
+                    {(run.status === 'draft' || !run.records || run.records.length === 0) && hasPermission(user, Permission.RUN_PAYROLL, run.entity_id) && (
                         <button
                             onClick={handleProcess}
                             className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary-200"
@@ -184,13 +190,15 @@ const PayrollDetail = () => {
                             Process
                         </button>
                     )}
-                    <button
-                        onClick={handleDelete}
-                        className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl font-bold text-sm transition-all border border-rose-100"
-                        title="Hard Delete Batch"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    {hasPermission(user, Permission.APPROVE_PAYROLL, run.entity_id) && (
+                        <button
+                            onClick={handleDelete}
+                            className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl font-bold text-sm transition-all border border-rose-100"
+                            title="Hard Delete Batch"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -307,12 +315,14 @@ const PayrollDetail = () => {
                             <div className="text-center py-8">
                                 <ShieldAlert className="w-12 h-12 text-dark-700 mx-auto mb-3" />
                                 <p className="text-dark-400 text-sm mb-4">Initial calculations are complete. Run AI audit now?</p>
-                                <button
-                                    onClick={handleAudit}
-                                    className="btn btn-primary w-full py-3"
-                                >
-                                    Run Audit Engine
-                                </button>
+                                {hasPermission(user, Permission.RUN_PAYROLL, run.entity_id) && (
+                                    <button
+                                        onClick={handleAudit}
+                                        className="btn btn-primary w-full py-3"
+                                    >
+                                        Run Audit Engine
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>

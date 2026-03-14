@@ -224,4 +224,5 @@ class EmployeeFullCreate(BaseModel):
 class EmployeeFullUpdate(BaseModel):
     person: Optional[PersonUpdate] = None
     employment: Optional[EmploymentUpdate] = None
+    bank_account: Optional[BankAccountCreate] = None
     salary_components: Optional[List[SalaryComponentCreateLocal]] = None

@@ -4,7 +4,11 @@ from sqlalchemy import select
 from typing import List, Optional
 from datetime import datetime
 from app.core.database import get_db
-from app.api.v1.dependencies import get_current_user, require_tenant_admin, get_entity_access
+from app.api.v1.dependencies import (
+    get_current_user, require_tenant_admin, get_entity_access,
+    has_permission_internal
+)
+from app.core.security.permissions import Permission
 from app.models.payroll import PayrollRun, PayrollRecord, PersonCPFSummary
 from app.models.auth import User
 from app.schemas.payroll import (
@@ -30,7 +34,8 @@ async def list_payroll_runs(
     """
     Lists all payroll runs for an entity.
     """
-    await get_entity_access(entity_id, user, db)
+    if not await has_permission_internal(db, user, entity_id, Permission.VIEW_PAYROLL):
+        raise HTTPException(status_code=403, detail="Insufficient permissions to view payroll")
     
     result = await db.execute(
         select(PayrollRun).where(PayrollRun.entity_id == entity_id).order_by(PayrollRun.period.desc())
@@ -49,11 +54,10 @@ async def create_payroll_run(
     Requires HR Admin access for the entity.
     """
     # 1. Verify Entity Access
-    role = await get_entity_access(request.entity_id, user, db)
-    if role != "hr_admin":
+    if not await has_permission_internal(db, user, request.entity_id, Permission.RUN_PAYROLL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only HR Admins can create payroll runs"
+            detail="Only users with RUN_PAYROLL permission can create payroll runs"
         )
 
     # 2. Check for existing run for this period
@@ -114,7 +118,8 @@ async def process_payroll_run(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
         
-    await get_entity_access(run.entity_id, user, db)
+    if not await has_permission_internal(db, user, run.entity_id, Permission.RUN_PAYROLL):
+        raise HTTPException(status_code=403, detail="Insufficient permissions to process payroll")
     
     count = await payroll_service.process_entity_payroll(db, run_id, user_id=user.id, ip_address=req.client.host if req.client else None)
     return {"message": f"Processed {count} records successfully"}
@@ -128,10 +133,14 @@ async def audit_payroll_run(
     """
     Triggers the AI Audit for a processed payroll run.
     """
-    await get_entity_access(None, user, db) # Basic access check, entity will be checked inside
-    
-    # In a real app, we'd pass entity_id to get_entity_access. 
-    # For now, we'll let the service handle the data fetching.
+    # Need to get run to check entity
+    result = await db.execute(select(PayrollRun).where(PayrollRun.id == run_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if not await has_permission_internal(db, user, run.entity_id, Permission.VIEW_PAYROLL):
+        raise HTTPException(status_code=403, detail="Insufficient permissions to audit payroll")
     
     flags_count = await ai_audit_service.run_audit(db, run_id)
     return {"flags_found": flags_count}
@@ -152,9 +161,9 @@ async def get_payroll_run(
     
     if not run:
         raise HTTPException(status_code=404, detail="Payroll run not found")
-
-    # Verify Entity Access
-    await get_entity_access(run.entity_id, user, db)
+    
+    if not await has_permission_internal(db, user, run.entity_id, Permission.VIEW_PAYROLL):
+        raise HTTPException(status_code=403, detail="Insufficient permissions to view payroll run")
 
     # Fetch records with detailed info
     from app.models.employment import Employment, Person
@@ -203,10 +212,8 @@ async def delete_payroll_run(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
         
-    # Verify entity access (Admin check handled inside)
-    role = await get_entity_access(run.entity_id, user, db)
-    if role != "hr_admin":
-        raise HTTPException(status_code=403, detail="Only HR Admins can delete runs")
+    if not await has_permission_internal(db, user, run.entity_id, Permission.APPROVE_PAYROLL):
+        raise HTTPException(status_code=403, detail="Only users with APPROVE_PAYROLL permission can delete runs")
 
     await payroll_service.delete_payroll_run(db, run_id, user_id=user.id, ip_address=req.client.host if req.client else None)
     return {"message": "Payroll run deleted successfully"}
@@ -251,10 +258,66 @@ async def get_payroll_record(
     record.entity_name = row.entity_name
     record.entity_uen = row.entity_uen
     
-    # Verify entity access
-    await get_entity_access(record.entity_id, user, db)
+    # Security check: Admin or the owner
+    if not user.is_tenant_admin:
+        if record.employment_id:
+            from app.models.employment import Employment
+            res = await db.execute(select(Employment.person_id).where(Employment.id == record.employment_id))
+            person_id = res.scalar()
+            if person_id != user.person_id:
+                raise HTTPException(status_code=403, detail="Not authorized to view this record")
+        else:
+            if not await has_permission_internal(db, user, record.entity_id, Permission.VIEW_PAYROLL):
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
+    else:
+        # Verify entity access for admin
+        if not await has_permission_internal(db, user, record.entity_id, Permission.VIEW_PAYROLL):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     return record
+
+@router.get("/slips/me", response_model=List[PayrollRecordResponse])
+async def get_my_payslips(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Lists all approved payslips for the current employee.
+    """
+    if not current_user.person_id:
+        raise HTTPException(status_code=404, detail="No employee record associated with this user")
+        
+    from app.models.employment import Employment, Person
+    from app.models.tenant import Entity
+
+    stmt = select(
+        PayrollRecord,
+        Person.full_name.label("employee_name"),
+        Employment.employee_code.label("employee_code"),
+        Entity.name.label("entity_name"),
+        Entity.uen.label("entity_uen")
+    ).join(
+        Employment, PayrollRecord.employment_id == Employment.id
+    ).join(
+        Person, Employment.person_id == Person.id
+    ).join(
+        Entity, PayrollRecord.entity_id == Entity.id
+    ).where(
+        Person.id == current_user.person_id,
+        PayrollRecord.status == "approved"
+    ).order_by(PayrollRecord.period.desc())
+
+    result = await db.execute(stmt)
+    records = []
+    for row in result:
+        rec = row.PayrollRecord
+        rec.employee_name = row.employee_name
+        rec.employee_code = row.employee_code
+        rec.entity_name = row.entity_name
+        rec.entity_uen = row.entity_uen
+        records.append(rec)
+        
+    return records
 
 from app.models.system import AuditLog
 
@@ -276,12 +339,9 @@ async def approve_payroll_run(
     
     if not run:
         raise HTTPException(status_code=404, detail="Payroll run not found")
-
-    # Only Tenant Admins can approve
-    if not user.is_tenant_admin:
-        role = await get_entity_access(run.entity_id, user, db)
-        if role != "hr_admin":
-             raise HTTPException(status_code=403, detail="Insufficient permissions")
+ 
+    if not await has_permission_internal(db, user, run.entity_id, Permission.APPROVE_PAYROLL):
+         raise HTTPException(status_code=403, detail="Insufficient permissions to approve payroll")
 
     # TODO: Check if AI Audit is clean
     
@@ -324,7 +384,18 @@ async def get_person_ytd(
     """
     Fetches the YTD CPF summary for a person.
     """
-    await get_entity_access(None, user, db) # Basic verification
+    # For YTD, we should ideally check if the user is an admin for ANY entity the person belongs to.
+    # For now, let's just use a basic VIEW_PAYROLL check.
+    # Ideally we'd fetch employment and check permissions for that entity.
+    from app.models.employment import Employment
+    res = await db.execute(select(Employment.entity_id).where(Employment.person_id == person_id).limit(1))
+    entity_id = res.scalar()
+    
+    if entity_id:
+        if not await has_permission_internal(db, user, entity_id, Permission.VIEW_PAYROLL):
+            # Also allow if it's the person themself
+            if user.person_id != person_id:
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     stmt = select(PersonCPFSummary).where(PersonCPFSummary.person_id == person_id)
     if year:
@@ -345,8 +416,13 @@ async def update_person_ytd(
     Manually updates or initializes YTD totals for a person.
     Useful for system migration mid-year.
     """
-    if not user.is_tenant_admin:
-         raise HTTPException(status_code=403, detail="Only Tenant Admins can manually adjust YTD")
+    # Check permissions for the entity the person belongs to
+    from app.models.employment import Employment
+    res = await db.execute(select(Employment.entity_id).where(Employment.person_id == person_id).limit(1))
+    entity_id = res.scalar()
+    
+    if not entity_id or not await has_permission_internal(db, user, entity_id, Permission.APPROVE_PAYROLL):
+         raise HTTPException(status_code=403, detail="Only users with APPROVE_PAYROLL permission can adjust YTD")
          
     stmt = select(PersonCPFSummary).where(
         PersonCPFSummary.person_id == person_id,
@@ -403,7 +479,8 @@ async def export_cpf91(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     
-    await get_entity_access(run.entity_id, user, db)
+    if not await has_permission_internal(db, user, run.entity_id, Permission.VIEW_PAYROLL):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Must be approved to export statutory files
     if run.status != "approved":
@@ -438,7 +515,8 @@ async def export_giro(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     
-    await get_entity_access(run.entity_id, user, db)
+    if not await has_permission_internal(db, user, run.entity_id, Permission.VIEW_PAYROLL):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     if run.status != "approved":
         raise HTTPException(status_code=400, detail="Payroll run must be approved before export")

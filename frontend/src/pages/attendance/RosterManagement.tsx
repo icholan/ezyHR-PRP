@@ -87,6 +87,7 @@ const RosterManagement: React.FC = () => {
     const fetchRoster = async () => {
         if (!activeEntityId) return;
         setLoading(true);
+        setRoster([]); // Clear stale data
         try {
             const res = await api.get('/api/v1/attendance/roster', {
                 params: { entity_id: activeEntityId, start_date: startDate, end_date: endDate }

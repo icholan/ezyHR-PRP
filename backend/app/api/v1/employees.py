@@ -1,11 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
-from app.api.v1.dependencies import get_db, get_current_active_user
+
+from app.api.v1.dependencies import get_db, get_current_active_user, require_permission, has_permission_internal, has_any_entity_permission
+from app.core.security.permissions import Permission
 from app.schemas.employee import EmployeeFullCreate, EmployeeSummary, EmployeeDetail, EmployeeFullUpdate, PersonRead
+from pydantic import BaseModel
 from app.services.employee import EmployeeService
-from app.models import User
+from app.models import User, UserEntityAccess
+
 import uuid
+
+class InviteRequest(BaseModel):
+    person_id: uuid.UUID
 
 router = APIRouter(prefix="/employees", tags=["Employees"], redirect_slashes=False)
 
@@ -24,15 +32,43 @@ async def check_nric(
         }
     return {"is_duplicate": False, "person": None}
 
+@router.post("/invite")
+async def invite_employee(
+    request: InviteRequest,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Invites an existing Person to the Employee Self-Service portal by generating a User account.
+    """
+    if not current_user.is_tenant_admin:
+        raise HTTPException(status_code=403, detail="Only Tenant Admins can invite users to the portal.")
+
+    service = EmployeeService(db)
+    temp_password = await service.invite_to_app(
+        person_id=request.person_id,
+        tenant_id=current_user.tenant_id,
+        admin_user_id=current_user.id,
+        ip_address=req.client.host if req.client else None
+    )
+
+    return {
+        "message": "Employee successfully invited to the portal. Please provide them with this temporary password.",
+        "temporary_password": temp_password
+    }
+
 @router.get("/persons", response_model=List[PersonRead])
 async def list_persons(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not current_user.is_tenant_admin:
-        raise HTTPException(status_code=403, detail="Only tenant admins can view all persons")
+    has_permission = await has_any_entity_permission(db, current_user, Permission.MANAGE_MULTI_ENTITY)
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Only tenant admins or authorized users can view all persons")
     service = EmployeeService(db)
     return await service.get_tenant_persons(current_user.tenant_id)
+
 
 @router.get("/persons/{person_id}/employments", response_model=List[EmployeeSummary])
 async def list_person_employments(
@@ -40,10 +76,12 @@ async def list_person_employments(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not current_user.is_tenant_admin:
-        raise HTTPException(status_code=403, detail="Only tenant admins can view multi-entity employments")
+    has_permission = await has_any_entity_permission(db, current_user, Permission.MANAGE_MULTI_ENTITY)
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Only tenant admins or authorized users can view multi-entity employments")
     service = EmployeeService(db)
     return await service.get_person_employments(person_id)
+
 
 @router.get("/persons/{person_id}", response_model=PersonRead)
 async def get_person(
@@ -51,8 +89,9 @@ async def get_person(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not current_user.is_tenant_admin:
-        raise HTTPException(status_code=403, detail="Only tenant admins can view person details")
+    has_permission = await has_any_entity_permission(db, current_user, Permission.MANAGE_MULTI_ENTITY)
+    if not has_permission and current_user.person_id != person_id:
+        raise HTTPException(status_code=403, detail="Only tenant admins or authorized users can view person details")
     service = EmployeeService(db)
     person = await service.get_person_by_id(person_id)
     if not person:
@@ -77,8 +116,79 @@ async def list_employees(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
+    # Security: check permission for this entity
+    await require_permission(Permission.VIEW_EMPLOYEES)(entity_id, current_user, db)
+    
+    # Data Isolation: restrict to managed groups/depts
+    managed_groups = None
+    managed_depts = None
+    
+    if not current_user.is_tenant_admin:
+        stmt = select(UserEntityAccess).where(
+            UserEntityAccess.user_id == current_user.id,
+            UserEntityAccess.entity_id == entity_id
+        )
+        res = await db.execute(stmt)
+        access = res.scalar_one_or_none()
+        if access:
+            managed_groups = access.managed_group_ids
+            managed_depts = access.managed_department_ids
+
     service = EmployeeService(db)
-    return await service.get_employees(entity_id, group_id=group_id)
+    return await service.get_employees(
+        entity_id, 
+        group_id=group_id,
+        managed_group_ids=managed_groups,
+        managed_dept_ids=managed_depts
+    )
+
+
+@router.get("/me", response_model=EmployeeDetail)
+async def get_my_profile(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not current_user.person_id:
+        raise HTTPException(status_code=404, detail="No employee record associated with this user")
+    
+    service = EmployeeService(db)
+    emp_id = await service.get_primary_employment_id(current_user.person_id)
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="No active employment found")
+        
+    detail = await service.get_employee_detail(emp_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Employee details not found")
+        
+    return detail
+
+@router.put("/me", response_model=EmployeeDetail)
+async def update_my_profile(
+    data: EmployeeFullUpdate,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not current_user.person_id:
+        raise HTTPException(status_code=404, detail="No employee record associated with this user")
+        
+    # Security: Ensure they don't try to update employment details or salary
+    data.employment = None
+    data.salary_components = None
+    data.bank_account = None
+    
+    service = EmployeeService(db)
+    emp_id = await service.get_primary_employment_id(current_user.person_id)
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="No active employment found")
+        
+    detail = await service.update_employee(
+        employment_id=emp_id,
+        data=data,
+        user_id=current_user.id,
+        ip_address=req.client.host if req.client else None
+    )
+    return detail
 
 @router.get("/{employment_id}", response_model=EmployeeDetail)
 async def get_employee(
@@ -90,7 +200,31 @@ async def get_employee(
     detail = await service.get_employee_detail(employment_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Employee not found")
+        
+    # Security: check if user is global admin OR has VIEW_EMPLOYEES permission for this entity
+    allowed = await has_permission_internal(
+        db, current_user, detail.employment.entity_id, Permission.VIEW_EMPLOYEES
+    )
+    
+    if not allowed and detail.person.id != current_user.person_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this employee")
+            
+    # Data Isolation for non-admins
+    if not current_user.is_tenant_admin and detail.person.id != current_user.person_id:
+        stmt = select(UserEntityAccess).where(
+            UserEntityAccess.user_id == current_user.id,
+            UserEntityAccess.entity_id == detail.employment.entity_id
+        )
+        res = await db.execute(stmt)
+        access = res.scalar_one_or_none()
+        if access:
+            if access.managed_group_ids is not None and detail.employment.group_id not in access.managed_group_ids:
+                raise HTTPException(status_code=403, detail="Employee outside your assigned groups")
+            if access.managed_department_ids is not None and detail.employment.department_id not in access.managed_department_ids:
+                raise HTTPException(status_code=403, detail="Employee outside your assigned departments")
+
     return detail
+
 
 @router.post("", response_model=EmployeeSummary)
 async def create_employee(
@@ -99,8 +233,12 @@ async def create_employee(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not current_user.is_tenant_admin:
-        raise HTTPException(status_code=403, detail="Only admins can add employees")
+    # Security: check permission for the target entity
+    allowed = await has_permission_internal(
+        db, current_user, data.employment.entity_id, Permission.EDIT_EMPLOYEES
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only admins with edit permission can add employees")
         
     service = EmployeeService(db)
     emp = await service.create_employee(
@@ -129,10 +267,33 @@ async def update_employee(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not current_user.is_tenant_admin:
-        raise HTTPException(status_code=403, detail="Only admins can edit employees")
-
     service = EmployeeService(db)
+    detail = await service.get_employee_detail(employment_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Security: check permission for the target entity
+    allowed = await has_permission_internal(
+        db, current_user, detail.employment.entity_id, Permission.EDIT_EMPLOYEES
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only admins with edit permission can edit employees")
+
+    # Data Isolation for non-admins
+    if not current_user.is_tenant_admin:
+        stmt = select(UserEntityAccess).where(
+            UserEntityAccess.user_id == current_user.id,
+            UserEntityAccess.entity_id == detail.employment.entity_id
+        )
+        res = await db.execute(stmt)
+        access = res.scalar_one_or_none()
+        if access:
+            if access.managed_group_ids is not None and detail.employment.group_id not in access.managed_group_ids:
+                raise HTTPException(status_code=403, detail="Employee outside your assigned groups")
+            if access.managed_department_ids is not None and detail.employment.department_id not in access.managed_department_ids:
+                raise HTTPException(status_code=403, detail="Employee outside your assigned departments")
+
+
     detail = await service.update_employee(
         employment_id=employment_id, 
         data=data,
@@ -150,10 +311,33 @@ async def deactivate_employee(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not current_user.is_tenant_admin:
-        raise HTTPException(status_code=403, detail="Only admins can deactivate employees")
-
     service = EmployeeService(db)
+    detail = await service.get_employee_detail(employment_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Security: check permission for the target entity
+    allowed = await has_permission_internal(
+        db, current_user, detail.employment.entity_id, Permission.DELETE_EMPLOYEES
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only admins with delete permission can deactivate employees")
+
+    # Data Isolation for non-admins
+    if not current_user.is_tenant_admin:
+        stmt = select(UserEntityAccess).where(
+            UserEntityAccess.user_id == current_user.id,
+            UserEntityAccess.entity_id == detail.employment.entity_id
+        )
+        res = await db.execute(stmt)
+        access = res.scalar_one_or_none()
+        if access:
+            if access.managed_group_ids is not None and detail.employment.group_id not in access.managed_group_ids:
+                raise HTTPException(status_code=403, detail="Employee outside your assigned groups")
+            if access.managed_department_ids is not None and detail.employment.department_id not in access.managed_department_ids:
+                raise HTTPException(status_code=403, detail="Employee outside your assigned departments")
+
+
     success = await service.deactivate_employee(
         employment_id=employment_id,
         user_id=current_user.id,

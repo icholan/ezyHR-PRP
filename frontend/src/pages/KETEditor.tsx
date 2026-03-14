@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
     ChevronLeft,
     Printer,
@@ -16,10 +16,14 @@ import {
     HeartPulse,
     ShieldCheck,
     Send,
+    FileText,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../services/api';
+import { usePermissions } from '../hooks/usePermissions';
+import { Permission } from '../types/permissions';
 import toast from 'react-hot-toast';
+
 import { clsx } from 'clsx';
 
 interface KETData {
@@ -38,6 +42,26 @@ const KETEditor = () => {
     const [activeTab, setActiveTab] = useState<'employer' | 'employee' | 'employment' | 'salary' | 'benefits'>('employment');
     const [isSaving, setIsSaving] = useState(false);
     const printRef = useRef<HTMLDivElement>(null);
+    const { hasPermission } = usePermissions();
+
+    if (!hasPermission(Permission.MANAGE_KET)) {
+        return (
+            <div className="p-12 text-center bg-white dark:bg-gray-900 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/10 h-[calc(100vh-200px)] flex flex-col items-center justify-center">
+                <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl flex items-center justify-center mb-6">
+                    <FileText className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Access Denied</h3>
+                <p className="mt-2 text-gray-500 dark:text-gray-400 max-w-sm mx-auto">You do not have permission to edit Key Employment Terms (KET).</p>
+                <button
+                    onClick={() => navigate('/ket')}
+                    className="mt-8 px-6 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+                >
+                    Back to Dashboard
+                </button>
+            </div>
+        );
+    }
+
 
     useEffect(() => {
         const loadData = async () => {

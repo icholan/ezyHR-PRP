@@ -45,7 +45,15 @@ class EntityUpdate(BaseModel):
     payment_day: Optional[int] = None
     work_week_hours: Optional[float] = None
     attendance_roster_mode: Optional[str] = None
+    website: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_branch_code: Optional[str] = None
+    bank_swift_code: Optional[str] = None
+    logo_url: Optional[str] = None
     is_active: Optional[bool] = None
+
 
 class EntityRead(EntityBase):
     id: uuid.UUID

@@ -43,6 +43,7 @@ const AttendanceLogs: React.FC = () => {
     const fetchLogs = async () => {
         if (!activeEntityId) return;
         setLoading(true);
+        setLogs([]); // Clear stale data
         try {
             const res = await api.get('/api/v1/attendance/daily-attendance', {
                 params: {

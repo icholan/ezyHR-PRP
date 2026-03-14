@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
-from app.models.auth import User
+from app.models.auth import User, UserEntityAccess, Role
 from app.models.tenant import Tenant
 from app.schemas.auth import LoginRequest, Token, TenantSignupRequest
 from app.core.security.auth import verify_password, create_tenant_user_token
@@ -59,9 +59,14 @@ async def login(
     """
     from sqlalchemy import func
     print(f"DEBUG: Login attempt for {request.email}")
+    from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(User)
-        .options(selectinload(User.entity_access))
+        .options(
+            selectinload(User.entity_access)
+            .selectinload(UserEntityAccess.role)
+            .selectinload(Role.permissions)
+        )
         .where(func.lower(User.email) == func.lower(request.email))
     )
     user = result.scalar_one_or_none()
@@ -90,21 +95,50 @@ async def login(
     user.last_login = datetime.utcnow()
     await db.commit()
 
+    # Prepare user response and check for admin roles
+    from app.schemas.users import UserEntityAccessRead
+    entity_access_data = []
+    has_admin_role = False
+    
+    for access in user.entity_access:
+        # If any role is not "Employee", treat as admin-capable for UI purposes
+        if access.role and access.role.name != "Employee":
+            has_admin_role = True
+            
+        access_read = UserEntityAccessRead.model_validate(access)
+        access_read.role_name = access.role.name if access.role else None
+        
+        # Populate permissions list
+        if access.role and access.role.permissions:
+            access_read.permissions = [p.permission for p in access.role.permissions]
+        
+        entity_access_data.append(access_read)
+
     # Issue token with tenant context
+    has_any_admin_access = user.is_tenant_admin or has_admin_role
     access_token = create_tenant_user_token(
         user_id=user.id,
         tenant_id=user.tenant_id,
-        is_admin=user.is_tenant_admin
+        is_admin=has_any_admin_access
     )
     
     # Fetch a default entity and tenant info for the user to use
     from app.models.tenant import Entity, Tenant
     from app.models.employment import Employment
     
-    entity_result = await db.execute(
-        select(Entity).where(Entity.tenant_id == user.tenant_id).limit(1)
-    )
-    entity = entity_result.scalar_one_or_none()
+    if user.is_tenant_admin:
+        entity_result = await db.execute(
+            select(Entity).where(Entity.tenant_id == user.tenant_id).limit(1)
+        )
+        entity = entity_result.scalar_one_or_none()
+    elif user.entity_access:
+        # Use the first entity they have access to as default
+        entity_result = await db.execute(
+            select(Entity).where(Entity.id == user.entity_access[0].entity_id).limit(1)
+        )
+        entity = entity_result.scalar_one_or_none()
+    else:
+        entity = None
     
     tenant_result = await db.execute(
         select(Tenant.setup_complete).where(Tenant.id == user.tenant_id)
@@ -137,7 +171,7 @@ async def login(
         "two_fa_enabled": user.two_fa_enabled,
         "last_login": user.last_login,
         "created_at": user.created_at,
-        "entity_access": user.entity_access,
+        "entity_access": entity_access_data,
         "person_id": user.person_id,
         "employment_id": active_employment_id,
         "selected_entity_id": entity.id if entity else None,

@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.models.employment import Person, Employment, BankAccount, Department, Group, Grade
 from app.models.payroll import SalaryStructure
+from app.models.auth import User, Role, UserEntityAccess
+from app.core.security.auth import get_password_hash
 from app.schemas.employee import (
     EmployeeFullCreate, EmployeeSummary, EmployeeFullUpdate,
     EmployeeDetail, EmployeeDetailPerson, EmployeeDetailEmployment, EmployeeDetailBank,
@@ -145,7 +147,18 @@ class EmployeeService:
         await self.db.refresh(employment)
         return employment
 
-    async def get_employees(self, entity_id: uuid.UUID, group_id: uuid.UUID = None) -> List[EmployeeSummary]:
+    async def get_primary_employment_id(self, person_id: uuid.UUID) -> Optional[uuid.UUID]:
+        query = select(Employment.id).where(Employment.person_id == person_id, Employment.is_active == True).limit(1)
+        res = await self.db.execute(query)
+        return res.scalar_one_or_none()
+
+    async def get_employees(
+        self, 
+        entity_id: uuid.UUID, 
+        group_id: uuid.UUID = None,
+        managed_group_ids: Optional[List[uuid.UUID]] = None,
+        managed_dept_ids: Optional[List[uuid.UUID]] = None
+    ) -> List[EmployeeSummary]:
         query = (
             select(Employment, Person, Department, Group, Grade)
             .join(Person, Employment.person_id == Person.id)
@@ -154,9 +167,18 @@ class EmployeeService:
             .outerjoin(Grade, Employment.grade_id == Grade.id)
             .where(Employment.entity_id == entity_id)
         )
+        
         if group_id:
             query = query.where(Employment.group_id == group_id)
+            
+        # Global Group/Dept Restrictions
+        if managed_group_ids is not None:
+            query = query.where(Employment.group_id.in_(managed_group_ids))
+        if managed_dept_ids is not None:
+            query = query.where(Employment.department_id.in_(managed_dept_ids))
+            
         result = await self.db.execute(query)
+
         rows = result.all()
         
         summaries = []
@@ -358,6 +380,32 @@ class EmployeeService:
             ip_address=ip_address
         )
 
+        # Update Bank Account
+        if data.bank_account:
+            bank_dict = data.bank_account.model_dump(exclude_unset=True)
+            raw_acc = bank_dict.pop("account_number", None)
+            
+            if employment.bank_account_id:
+                # Update existing
+                if raw_acc:
+                    bank_dict["account_number"] = encryptor.encrypt(raw_acc)
+                await self.db.execute(
+                    update(BankAccount).where(BankAccount.id == employment.bank_account_id).values(**bank_dict)
+                )
+            else:
+                # Create new
+                if not raw_acc:
+                    raise HTTPException(status_code=400, detail="Account number is required for new bank account.")
+                
+                new_bank = BankAccount(
+                    **bank_dict,
+                    person_id=employment.person_id,
+                    account_number=encryptor.encrypt(raw_acc)
+                )
+                self.db.add(new_bank)
+                await self.db.flush()
+                employment.bank_account_id = new_bank.id
+
         # Update Salary Components
         if data.salary_components is not None:
             # Simple sync: delete all and re-add (for now, can be optimized)
@@ -483,3 +531,96 @@ class EmployeeService:
         if person:
             return PersonRead.model_validate(person)
         return None
+
+    async def invite_to_app(self, person_id: uuid.UUID, tenant_id: uuid.UUID, admin_user_id: uuid.UUID, ip_address: str = None) -> str:
+        """
+        Creates a User account for an existing Person, granting them basic Employee access.
+        Returns the generated temporary password.
+        """
+        import secrets
+        import string
+
+        # 1. Check if person exists and get email
+        person_res = await self.db.execute(select(Person).where(Person.id == person_id, Person.tenant_id == tenant_id))
+        person = person_res.scalar_one_or_none()
+        
+        if not person:
+            raise HTTPException(status_code=404, detail="Employee record not found.")
+            
+        # 2. Get their active employment to find work email if any
+        emp_res = await self.db.execute(
+            select(Employment).where(Employment.person_id == person_id, Employment.is_active == True).limit(1)
+        )
+        employment = emp_res.scalar_one_or_none()
+        
+        email = None
+        if employment and getattr(employment, 'work_email', None):
+            email = employment.work_email
+        else:
+            email = getattr(person, 'personal_email', None)
+
+        if not email:
+            raise HTTPException(status_code=400, detail="Employee must have an email address to be invited.")
+
+        # 3. Check if user already exists
+        user_res = await self.db.execute(select(User).where(User.person_id == person_id))
+        existing_user = user_res.scalar_one_or_none()
+        
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Employee already has portal access.")
+            
+        # 3. Check if email is globally in use
+        email_res = await self.db.execute(select(User).where(User.email == email))
+        if email_res.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="This email is already registered in the system.")
+
+        # 4. Generate Temporary Password
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        temp_password = ''.join(secrets.choice(alphabet) for i in range(12))
+        
+        # 5. Create User
+        user_id = uuid.uuid4()
+        new_user = User(
+            id=user_id,
+            email=email,
+            password_hash=get_password_hash(temp_password),
+            full_name=person.full_name,
+            tenant_id=tenant_id,
+            person_id=person_id,
+            is_tenant_admin=False,
+            is_active=True
+        )
+        self.db.add(new_user)
+        
+        # 6. Grant Access to primary Entity using Employee Role
+        if employment:
+            # Find the "Employee" role for this tenant
+            role_res = await self.db.execute(
+                select(Role).where(Role.tenant_id == tenant_id, Role.name == "Employee").limit(1)
+            )
+            employee_role = role_res.scalar_one_or_none()
+            
+            if employee_role:
+                access = UserEntityAccess(
+                    user_id=user_id,
+                    entity_id=employment.entity_id,
+                    role_id=employee_role.id
+                )
+                self.db.add(access)
+                
+        # 7. Audit Log
+        await AuditService.log_action(
+            db=self.db,
+            action="INVITE_TO_APP",
+            table_name="users",
+            record_id=user_id,
+            new_value={"person_id": str(person_id), "email": email, "role": "Employee"},
+            user_id=admin_user_id,
+            tenant_id=tenant_id,
+            entity_id=employment.entity_id if employment else None,
+            ip_address=ip_address
+        )
+        
+        await self.db.commit()
+        
+        return temp_password
