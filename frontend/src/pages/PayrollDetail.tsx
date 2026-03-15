@@ -22,6 +22,7 @@ import { toast } from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
 import { hasPermission } from '../utils/permissions';
 import { Permission } from '../types/permissions';
+import PrivacyToggle from '../components/Payroll/PrivacyToggle';
 
 
 const PayrollDetail = () => {
@@ -29,7 +30,10 @@ const PayrollDetail = () => {
     const navigate = useNavigate();
     const [run, setRun] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const user = useAuthStore(state => state.user);
+    const { user, privacyMode } = useAuthStore(state => ({
+        user: state.user,
+        privacyMode: state.privacyMode
+    }));
 
 
     const fetchDetail = async () => {
@@ -154,6 +158,7 @@ const PayrollDetail = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    <PrivacyToggle />
                     {run.status === 'approved' && hasPermission(user, Permission.VIEW_PAYROLL, run.entity_id) && (
                         <div className="flex items-center bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
                             <button
@@ -205,8 +210,8 @@ const PayrollDetail = () => {
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                    { label: 'Total Net Payable', value: `$${Number(run.total_net || 0).toLocaleString()}`, icon: Wallet, color: 'text-primary-600', bg: 'bg-primary-50' },
-                    { label: 'Total CPF Liability', value: `$${(Number(run.total_cpf_ee || 0) + Number(run.total_cpf_er || 0)).toLocaleString()}`, icon: Building, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                    { label: 'Total Net Payable', value: privacyMode ? '••••••' : `$${Number(run.total_net || 0).toLocaleString()}`, icon: Wallet, color: 'text-primary-600', bg: 'bg-primary-50' },
+                    { label: 'Total CPF Liability', value: privacyMode ? '••••••' : `$${(Number(run.total_cpf_ee || 0) + Number(run.total_cpf_er || 0)).toLocaleString()}`, icon: Building, color: 'text-indigo-600', bg: 'bg-indigo-50' },
                     { label: 'Total Employees', value: run.records?.length || 0, icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
                 ].map((stat, i) => (
                     <div key={i} className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm dark:shadow-gray-950/20 flex items-center gap-4">
@@ -248,9 +253,15 @@ const PayrollDetail = () => {
                                                 <p className="font-bold text-dark-950 dark:text-gray-50">{record.employee_name || 'Staff'}</p>
                                                 <p className="text-xs text-gray-400 dark:text-gray-500">{record.employee_code || 'EMP001'}</p>
                                             </td>
-                                            <td className="px-6 py-4 font-medium text-gray-600 dark:text-gray-300">${Number(record.gross_salary).toFixed(2)}</td>
-                                            <td className="px-6 py-4 font-medium text-rose-600 dark:text-rose-400">-${Number(record.cpf_employee).toFixed(2)}</td>
-                                            <td className="px-6 py-4 font-bold text-dark-950 dark:text-gray-50">${Number(record.net_salary).toFixed(2)}</td>
+                                            <td className="px-6 py-4 font-medium text-gray-600 dark:text-gray-300">
+                                                {privacyMode ? '••••••' : `$${Number(record.gross_salary).toFixed(2)}`}
+                                            </td>
+                                            <td className="px-6 py-4 font-medium text-rose-600 dark:text-rose-400">
+                                                {privacyMode ? '••••••' : `-$${Number(record.cpf_employee).toFixed(2)}`}
+                                            </td>
+                                            <td className="px-6 py-4 font-bold text-dark-950 dark:text-gray-50">
+                                                {privacyMode ? '••••••' : `$${Number(record.net_salary).toFixed(2)}`}
+                                            </td>
                                             <td className="px-6 py-4 text-right">
                                                 <button
                                                     onClick={() => navigate(`/payroll/${id}/payslip/${record.id}`)}
@@ -340,13 +351,15 @@ const PayrollDetail = () => {
                             ].map((item, i) => (
                                 <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 dark:text-gray-500">{item.label}</span>
-                                    <span className="text-sm font-bold text-dark-950 dark:text-gray-50">${Number(item.value).toFixed(2)}</span>
+                                    <span className="text-sm font-bold text-dark-950 dark:text-gray-50">
+                                        {privacyMode ? '••••••' : `$${Number(item.value).toFixed(2)}`}
+                                    </span>
                                 </div>
                             ))}
                             <div className="pt-2 flex items-center justify-between">
                                 <span className="text-sm font-bold text-primary-600">Total Statutory</span>
                                 <span className="text-lg font-black text-primary-600">
-                                    ${(Number(run.total_cpf_er) + Number(run.total_cpf_ee) + Number(run.total_sdl) + Number(run.total_shg)).toFixed(2)}
+                                    {privacyMode ? '••••••' : `$${(Number(run.total_cpf_er) + Number(run.total_cpf_ee) + Number(run.total_sdl) + Number(run.total_shg)).toFixed(2)}`}
                                 </span>
                             </div>
                         </div>

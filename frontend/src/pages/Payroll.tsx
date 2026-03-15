@@ -21,11 +21,15 @@ import { useAuthStore } from '../store/useAuthStore';
 import { clsx } from 'clsx';
 import { hasPermission } from '../utils/permissions';
 import { Permission } from '../types/permissions';
+import PrivacyToggle from '../components/Payroll/PrivacyToggle';
 
 
 const Payroll = () => {
     const navigate = useNavigate();
-    const user = useAuthStore((state) => state.user);
+    const { user, privacyMode } = useAuthStore((state) => ({ 
+        user: state.user, 
+        privacyMode: state.privacyMode 
+    }));
     const [runs, setRuns] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [summary, setSummary] = useState({
@@ -84,22 +88,25 @@ const Payroll = () => {
                     <h1 className="text-3xl font-bold text-dark-950 dark:text-gray-50 font-['Outfit']">Payroll Management</h1>
                     <p className="text-gray-500 dark:text-gray-400 dark:text-gray-500">Process monthly salaries and review compliance audits.</p>
                 </div>
-                {hasPermission(user, Permission.RUN_PAYROLL, entityId) && (
-                    <button
-                        onClick={() => navigate('/payroll/new')}
-                        className="btn btn-primary flex items-center gap-2 py-3 px-6 shadow-lg shadow-primary-200"
-                    >
-                        <Plus className="w-5 h-5" />
-                        Initialize New Run
-                    </button>
-                )}
+                <div className="flex items-center gap-3">
+                    <PrivacyToggle />
+                    {hasPermission(user, Permission.RUN_PAYROLL, entityId) && (
+                        <button
+                            onClick={() => navigate('/payroll/new')}
+                            className="btn btn-primary flex items-center gap-2 py-3 px-6 shadow-lg shadow-primary-200"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Initialize New Run
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {[
-                    { label: 'Total Payout', value: `$${summary.totalPayout.toLocaleString()}`, sub: '+2.4% vs last month', icon: Wallet, color: 'bg-primary-50 text-primary-600', trend: 'up' },
-                    { label: 'CPF Liabilities', value: `$${summary.totalCpf.toLocaleString()}`, sub: 'Due by 15th Mar', icon: FileText, color: 'bg-indigo-50 text-indigo-600', trend: 'none' },
+                    { label: 'Total Payout', value: privacyMode ? '••••••' : `$${summary.totalPayout.toLocaleString()}`, sub: '+2.4% vs last month', icon: Wallet, color: 'bg-primary-50 text-primary-600', trend: 'up' },
+                    { label: 'CPF Liabilities', value: privacyMode ? '••••••' : `$${summary.totalCpf.toLocaleString()}`, sub: 'Due by 15th Mar', icon: FileText, color: 'bg-indigo-50 text-indigo-600', trend: 'none' },
                     { label: 'AI Audit Flags', value: summary.pendingAudits, sub: 'Requires review', icon: ShieldCheck, color: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400', trend: 'down' },
                     { label: 'Active Runs', value: summary.activeRuns, sub: 'In progress', icon: Clock, color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400', trend: 'none' },
                 ].map((stat, i) => (
@@ -196,7 +203,7 @@ const Payroll = () => {
                                         {run.total_employees || '—'}
                                     </td>
                                     <td className="px-6 py-5 font-bold text-dark-950 dark:text-gray-50">
-                                        ${Number(run.total_net).toLocaleString()}
+                                        {privacyMode ? '••••••' : `$${Number(run.total_net).toLocaleString()}`}
                                     </td>
                                     <td className="px-6 py-5">
                                         {run.ai_audit_run ? (

@@ -6,7 +6,9 @@ import {
     FileText,
     ChevronRight,
     Loader2,
-    Info
+    Info,
+    Users,
+    CheckCircle2
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
@@ -20,6 +22,9 @@ const PayrollNew = () => {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
     const [loading, setLoading] = useState(false);
+    const [groups, setGroups] = useState<any[]>([]);
+    const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
 
     // Default to current month
     const today = new Date();
@@ -37,7 +42,47 @@ const PayrollNew = () => {
     const currentYear = new Date().getFullYear();
     const years = [currentYear - 1, currentYear, currentYear + 1];
 
+    React.useEffect(() => {
+        const fetchGroups = async () => {
+            if (!user?.selected_entity_id) return;
+            try {
+                setLoadingGroups(true);
+                const res = await api.get(`/api/v1/masters/groups?entity_id=${user.selected_entity_id}`);
+                let allGroups = res.data;
+
+                // Filter based on managed groups if not tenant admin
+                if (!user.is_tenant_admin) {
+                    const access = user.entity_access?.find(a => a.entity_id === user.selected_entity_id);
+                    if (access?.managed_group_ids && access.managed_group_ids.length > 0) {
+                        allGroups = allGroups.filter((g: any) => access.managed_group_ids?.includes(g.id));
+                    }
+                }
+                setGroups(allGroups);
+            } catch (error) {
+                console.error("Failed to fetch groups", error);
+            } finally {
+                setLoadingGroups(false);
+            }
+        };
+
+        fetchGroups();
+    }, [user?.selected_entity_id, user?.is_tenant_admin, user?.entity_access]);
+
     const canCreate = hasPermission(user, Permission.RUN_PAYROLL, user?.selected_entity_id);
+
+    const toggleGroup = (groupId: string) => {
+        setSelectedGroupIds(prev =>
+            prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]
+        );
+    };
+
+    const toggleAllGroups = () => {
+        if (selectedGroupIds.length === groups.length) {
+            setSelectedGroupIds([]);
+        } else {
+            setSelectedGroupIds(groups.map(g => g.id));
+        }
+    };
 
     const handleCreate = async () => {
         if (!user?.selected_entity_id) {
@@ -53,7 +98,8 @@ const PayrollNew = () => {
             const response = await api.post('/api/v1/payroll/runs', {
                 entity_id: user.selected_entity_id,
                 period: periodStr,
-                notes: notes
+                notes: notes,
+                group_ids: selectedGroupIds.length > 0 ? selectedGroupIds : null
             });
 
             toast.success("Payroll run initialized successfully");
@@ -142,6 +188,73 @@ const PayrollNew = () => {
                                     placeholder="Add any specific comments for this run (e.g., Year end bonus adjustments)"
                                     className="w-full bg-gray-50 dark:bg-gray-800 border-none rounded-2xl py-4 px-6 text-dark-950 dark:text-gray-50 font-medium h-32 focus:ring-2 focus:ring-primary-500 transition-all resize-none placeholder:text-gray-300 dark:placeholder:text-gray-600"
                                 />
+                            </div>
+
+                            {/* Group Selection */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-bold text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                                        <Users className="w-4 h-4" />
+                                        SELECT GROUPS
+                                    </label>
+                                    {groups.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={toggleAllGroups}
+                                            className="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider hover:underline"
+                                        >
+                                            {selectedGroupIds.length === groups.length ? 'Deselect All' : 'Select All'}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {loadingGroups ? (
+                                    <div className="flex justify-center py-4">
+                                        <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+                                    </div>
+                                ) : groups.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {groups.map((group) => {
+                                            const isSelected = selectedGroupIds.includes(group.id);
+                                            return (
+                                                <button
+                                                    key={group.id}
+                                                    type="button"
+                                                    onClick={() => toggleGroup(group.id)}
+                                                    className={clsx(
+                                                        "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
+                                                        isSelected
+                                                            ? "bg-primary-600 text-white border-primary-500 shadow-lg shadow-primary-200 dark:shadow-primary-900/20"
+                                                            : "bg-gray-50 dark:bg-gray-800 border-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-750"
+                                                    )}
+                                                >
+                                                    <div className={clsx(
+                                                        "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
+                                                        isSelected ? "bg-white/20" : "bg-white dark:bg-gray-900"
+                                                    )}>
+                                                        {isSelected ? (
+                                                            <CheckCircle2 className="w-4 h-4 text-white" />
+                                                        ) : (
+                                                            <Users className="w-4 h-4 text-gray-400" />
+                                                        )}
+                                                    </div>
+                                                    <div className="overflow-hidden">
+                                                        <p className={clsx("text-xs font-bold truncate", isSelected ? "text-white" : "text-dark-950 dark:text-gray-100")}>
+                                                            {group.name}
+                                                        </p>
+                                                        <p className={clsx("text-[10px] font-medium opacity-60 truncate")}>
+                                                            {group.code || 'No Code'}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 text-center">
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No groups found for this entity.</p>
+                                    </div>
+                                )}
                             </div>
 
                                 <button

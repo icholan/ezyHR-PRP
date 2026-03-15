@@ -60,6 +60,25 @@ async def create_payroll_run(
             detail="Only users with RUN_PAYROLL permission can create payroll runs"
         )
 
+    # 1.5 Validate Group Access (for managers with restricted group access)
+    if not user.is_tenant_admin and request.group_ids:
+        # Fetch user access record for this entity
+        access_stmt = select(UserEntityAccess).where(
+            UserEntityAccess.user_id == user.id,
+            UserEntityAccess.entity_id == request.entity_id
+        )
+        access_res = await db.execute(access_stmt)
+        access = access_res.scalar_one_or_none()
+        
+        if access and access.managed_group_ids:
+            # Check if all requested group_ids are within managed_group_ids
+            invalid_groups = [gid for gid in request.group_ids if gid not in access.managed_group_ids]
+            if invalid_groups:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"You do not have permission to run payroll for the following groups: {invalid_groups}"
+                )
+
     # 2. Check for existing run for this period
     existing = await db.execute(
         select(PayrollRun).where(
@@ -79,7 +98,8 @@ async def create_payroll_run(
         period=request.period,
         status="draft",
         run_by=user.id,
-        notes=request.notes
+        notes=request.notes,
+        group_ids=request.group_ids
     )
     
     db.add(new_run)

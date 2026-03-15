@@ -122,13 +122,18 @@ class PayrollService:
         await att_service.compute_monthly_attendance(run.entity_id, run.period)
 
         # 1. Fetch active employments
-        emp_result = await db.execute(
-            select(Employment, Person).join(Person).where(
-                Employment.entity_id == run.entity_id,
-                Employment.is_active == True,
-                Employment.join_date <= run.period
-            )
+        from sqlalchemy import and_
+        emp_stmt = select(Employment, Person).join(Person).where(
+            Employment.entity_id == run.entity_id,
+            Employment.is_active == True,
+            Employment.join_date <= run.period
         )
+        
+        # Apply group filter if present
+        if run.group_ids:
+            emp_stmt = emp_stmt.where(Employment.group_id.in_(run.group_ids))
+            
+        emp_result = await db.execute(emp_stmt)
         employments = emp_result.all()
 
         processed_count = 0

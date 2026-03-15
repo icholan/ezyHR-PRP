@@ -16,6 +16,8 @@ interface User {
         role_id: string;
         role_name?: string;
         permissions?: string[];
+        managed_department_ids?: string[];
+        managed_group_ids?: string[];
     }[];
 }
 
@@ -23,8 +25,10 @@ interface AuthState {
     user: User | null;
     token: string | null;
     isAuthenticated: boolean;
+    privacyMode: boolean;
     login: (user: User, token: string) => void;
     setEntity: (entityId: string) => void;
+    togglePrivacyMode: () => void;
     completeSetup: () => void;
     logout: () => void;
 }
@@ -35,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
             user: null,
             token: null,
             isAuthenticated: false,
+            privacyMode: false,
             login: (user, token) => {
                 localStorage.setItem('token', token);
                 set({ user, token, isAuthenticated: true });
@@ -43,6 +48,9 @@ export const useAuthStore = create<AuthState>()(
                 set((state) => ({
                     user: state.user ? { ...state.user, selected_entity_id: entityId } : null
                 }));
+            },
+            togglePrivacyMode: () => {
+                set((state) => ({ privacyMode: !state.privacyMode }));
             },
             completeSetup: () => {
                 set((state) => ({

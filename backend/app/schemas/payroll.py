@@ -42,6 +42,7 @@ class PayrollRunBase(BaseModel):
 
 class PayrollRunCreate(PayrollRunBase):
     notes: Optional[str] = None
+    group_ids: Optional[List[UUID]] = None
 
 class PayrollRunResponse(PayrollRunBase):
     id: UUID
@@ -56,6 +57,7 @@ class PayrollRunResponse(PayrollRunBase):
     total_employees: int = 0
     ai_audit_run: bool
     ai_flags_count: int
+    group_ids: Optional[List[UUID]] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 

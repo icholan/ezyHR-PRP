@@ -38,6 +38,7 @@ class PayrollRun(Base, IDMixin, TimestampMixin):
     ai_audit_run: Mapped[bool] = mapped_column(Boolean, default=False)
     ai_flags_count: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[str] = mapped_column(Text, nullable=True)
+    group_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
 
     __table_args__ = (UniqueConstraint("entity_id", "period", name="uq_payroll_runs_period"),)
 
