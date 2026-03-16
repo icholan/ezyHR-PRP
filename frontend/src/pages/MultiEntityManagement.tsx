@@ -45,7 +45,7 @@ interface Employment {
 
 const MultiEntityManagement = () => {
     const navigate = useNavigate();
-    const { setEntity } = useAuthStore();
+    const { setEntity, user } = useAuthStore();
     const { hasPermission } = usePermissions();
 
     const [persons, setPersons] = useState<Person[]>([]);
@@ -71,7 +71,7 @@ const MultiEntityManagement = () => {
         try {
             setLoading(true);
             const [personsRes, entitiesRes] = await Promise.all([
-                api.get('/api/v1/employees/persons'),
+                api.get('/api/v1/employees/persons', { params: { entity_id: user?.selected_entity_id } }),
                 api.get('/api/v1/entities')
             ]);
             setPersons(personsRes.data);
@@ -87,7 +87,9 @@ const MultiEntityManagement = () => {
         try {
             setLoadingEmployments(true);
             setSelectedPerson(person);
-            const res = await api.get(`/api/v1/employees/persons/${person.id}/employments`);
+            const res = await api.get(`/api/v1/employees/persons/${person.id}/employments`, {
+                params: { entity_id: user?.selected_entity_id }
+            });
             setPersonEmployments(res.data);
         } catch (error) {
             toast.error("Failed to fetch employments");

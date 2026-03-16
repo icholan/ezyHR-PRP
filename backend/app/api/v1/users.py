@@ -51,13 +51,42 @@ async def list_users(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Apply pagination and sorting
-    query = query.options(selectinload(User.entity_access)).order_by(User.full_name.asc()).offset(skip).limit(limit)
+    # Apply pagination and sorting with nested selectinload
+    query = query.options(
+        selectinload(User.entity_access).selectinload(UserEntityAccess.role)
+    ).order_by(User.full_name.asc()).offset(skip).limit(limit)
     
     result = await db.execute(query)
     items = result.scalars().all()
     
-    return {"items": items, "total": total}
+    from app.models.employment import Employment
+    from app.schemas.users import UserEntityAccessRead
+    
+    processed_items = []
+    for user_item in items:
+        processed_access = []
+        for access in user_item.entity_access:
+            access_read = UserEntityAccessRead.model_validate(access)
+            # Role name is now safe to access because of selectinload
+            access_read.role_name = access.role.name if access.role else None
+            
+            if user_item.person_id:
+                emp_stmt = select(Employment.id).where(
+                    Employment.person_id == user_item.person_id,
+                    Employment.entity_id == access.entity_id,
+                    Employment.is_active == True
+                ).limit(1)
+                emp_res = await db.execute(emp_stmt)
+                access_read.employment_id = emp_res.scalar()
+            
+            processed_access.append(access_read)
+        
+        # Create a dict from UserRead schema to avoid mutating model with schema instances
+        user_read = UserRead.model_validate(user_item)
+        user_read.entity_access = processed_access
+        processed_items.append(user_read)
+
+    return {"items": processed_items, "total": total}
 
 
 @router.get("/{user_id}", response_model=UserRead)
@@ -72,14 +101,43 @@ async def get_user(
     if not current_user.is_tenant_admin and current_user.id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to view this user")
         
-    stmt = select(User).options(selectinload(User.entity_access)).where(User.id == user_id, User.tenant_id == current_user.tenant_id)
+    stmt = (
+        select(User)
+        .options(selectinload(User.entity_access).selectinload(UserEntityAccess.role))
+        .where(User.id == user_id, User.tenant_id == current_user.tenant_id)
+    )
     result = await db.execute(stmt)
     db_user = result.scalar_one_or_none()
     
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    return db_user
+    from app.models.employment import Employment
+    from app.schemas.users import UserEntityAccessRead
+    
+    # Process entity access to include employment_id
+    processed_access = []
+    for access in db_user.entity_access:
+        access_read = UserEntityAccessRead.model_validate(access)
+        # Role name is now safe to access because of selectinload
+        access_read.role_name = access.role.name if access.role else None
+        
+        if db_user.person_id:
+            emp_stmt = select(Employment.id).where(
+                Employment.person_id == db_user.person_id,
+                Employment.entity_id == access.entity_id,
+                Employment.is_active == True
+            ).limit(1)
+            emp_res = await db.execute(emp_stmt)
+            access_read.employment_id = emp_res.scalar()
+        
+        processed_access.append(access_read)
+        
+    # We'll return a dict that matches UserRead schema since we've enriched it
+    user_data = UserRead.model_validate(db_user).model_dump()
+    user_data['entity_access'] = processed_access
+    
+    return user_data
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)

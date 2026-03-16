@@ -100,6 +100,7 @@ async def login(
     entity_access_data = []
     has_admin_role = False
     
+    from app.models.employment import Employment
     for access in user.entity_access:
         # If any role is not "Employee", treat as admin-capable for UI purposes
         if access.role and access.role.name != "Employee":
@@ -112,6 +113,19 @@ async def login(
         if access.role and access.role.permissions:
             access_read.permissions = [p.permission for p in access.role.permissions]
         
+        # Populate entity-specific employment_id
+        if user.person_id:
+            emp_result = await db.execute(
+                select(Employment.id)
+                .where(
+                    Employment.person_id == user.person_id,
+                    Employment.entity_id == access.entity_id,
+                    Employment.is_active == True
+                )
+                .limit(1)
+            )
+            access_read.employment_id = emp_result.scalar()
+            
         entity_access_data.append(access_read)
 
     # Issue token with tenant context

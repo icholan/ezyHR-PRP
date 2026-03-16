@@ -60,12 +60,12 @@ async def invite_employee(
 
 @router.get("/persons", response_model=List[PersonRead])
 async def list_persons(
+    entity_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    has_permission = await has_any_entity_permission(db, current_user, Permission.MANAGE_MULTI_ENTITY)
-    if not has_permission:
-        raise HTTPException(status_code=403, detail="Only tenant admins or authorized users can view all persons")
+    # Enforce entity-scoped permission for listing persons
+    await require_permission(Permission.MANAGE_MULTI_ENTITY)(entity_id, current_user, db)
     service = EmployeeService(db)
     return await service.get_tenant_persons(current_user.tenant_id)
 
@@ -73,12 +73,11 @@ async def list_persons(
 @router.get("/persons/{person_id}/employments", response_model=List[EmployeeSummary])
 async def list_person_employments(
     person_id: uuid.UUID,
+    entity_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    has_permission = await has_any_entity_permission(db, current_user, Permission.MANAGE_MULTI_ENTITY)
-    if not has_permission:
-        raise HTTPException(status_code=403, detail="Only tenant admins or authorized users can view multi-entity employments")
+    await require_permission(Permission.MANAGE_MULTI_ENTITY)(entity_id, current_user, db)
     service = EmployeeService(db)
     return await service.get_person_employments(person_id)
 
@@ -86,12 +85,15 @@ async def list_person_employments(
 @router.get("/persons/{person_id}", response_model=PersonRead)
 async def get_person(
     person_id: uuid.UUID,
+    entity_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    has_permission = await has_any_entity_permission(db, current_user, Permission.MANAGE_MULTI_ENTITY)
-    if not has_permission and current_user.person_id != person_id:
+    if entity_id:
+        await require_permission(Permission.MANAGE_MULTI_ENTITY)(entity_id, current_user, db)
+    elif current_user.person_id != person_id:
         raise HTTPException(status_code=403, detail="Only tenant admins or authorized users can view person details")
+        
     service = EmployeeService(db)
     person = await service.get_person_by_id(person_id)
     if not person:

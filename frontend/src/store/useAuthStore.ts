@@ -10,12 +10,15 @@ interface User {
     is_tenant_admin: boolean;
     setup_complete: boolean;
     display_name?: string;
+    full_name?: string;
+    avatar_url?: string;
     employment_id?: string;
     entity_access?: {
         entity_id: string;
         role_id: string;
         role_name?: string;
         permissions?: string[];
+        employment_id?: string;
         managed_department_ids?: string[];
         managed_group_ids?: string[];
     }[];
@@ -27,6 +30,7 @@ interface AuthState {
     isAuthenticated: boolean;
     privacyMode: boolean;
     login: (user: User, token: string) => void;
+    updateUser: (user: Partial<User>) => void;
     setEntity: (entityId: string) => void;
     togglePrivacyMode: () => void;
     completeSetup: () => void;
@@ -43,6 +47,11 @@ export const useAuthStore = create<AuthState>()(
             login: (user, token) => {
                 localStorage.setItem('token', token);
                 set({ user, token, isAuthenticated: true });
+            },
+            updateUser: (userData) => {
+                set((state) => ({
+                    user: state.user ? { ...state.user, ...userData } : null
+                }));
             },
             setEntity: (entityId) => {
                 set((state) => ({

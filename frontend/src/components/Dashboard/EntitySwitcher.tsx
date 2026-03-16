@@ -93,8 +93,20 @@ const EntitySwitcher = () => {
                                     <button
                                         key={entity.id}
                                         onClick={() => {
+                                            const access = user?.entity_access?.find(a => a.entity_id === entity.id);
+                                            const isTargetEmployee = access?.role_name === 'Employee' && !user?.is_tenant_admin;
+                                            
                                             setEntity(entity.id);
                                             setIsOpen(false);
+
+                                            // Determine redirection
+                                            const isOnESSPage = ['/me', '/leave/my', '/profile', '/me/payslips', '/attendance/clock', '/attendance/history'].some(path => window.location.pathname.startsWith(path));
+
+                                            if (isTargetEmployee) {
+                                                navigate('/me');
+                                            } else if (isOnESSPage) {
+                                                navigate('/dashboard');
+                                            }
                                         }}
                                         className={clsx(
                                             "w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all",

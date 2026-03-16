@@ -147,7 +147,10 @@ const Sidebar = ({ onClose }: SidebarProps) => {
                             </h3>
                         )}
                         {group.items.filter(item => {
-                            const hasAdminAccess = user?.is_tenant_admin || (user?.entity_access && user.entity_access.some(a => a.role_name !== 'Employee'));
+                            // Enforce entity-scoped admin access:
+                            // A user is only an admin in the context of the currently selected entity
+                            const currentEntityAccess = user?.entity_access?.find(a => a.entity_id === user?.selected_entity_id);
+                            const hasAdminAccess = user?.is_tenant_admin || (currentEntityAccess && currentEntityAccess.role_name !== 'Employee');
                             
                             // Special case for Team Leave which now has a granular permission
                             if (item.path === '/attendance/leave/team') {
@@ -168,7 +171,7 @@ const Sidebar = ({ onClose }: SidebarProps) => {
 
 
                             if ((item as any).isEmployeeOnly && user?.is_tenant_admin) return false;
-                            if ((item as any).requiresEmployment && !user?.employment_id) return false;
+                            if ((item as any).requiresEmployment && !currentEntityAccess?.employment_id) return false;
                             return true;
                         }).map((item) => (
 
@@ -200,18 +203,18 @@ const Sidebar = ({ onClose }: SidebarProps) => {
                 ))}
             </nav>
 
-            <div className={clsx("mt-auto", isCollapsed ? "p-3" : "p-4")}>
+            <div className={clsx("mt-auto flex flex-col gap-1", isCollapsed ? "p-3" : "p-4")}>
                 <button
-
                     onClick={handleLogout}
-                    title={isCollapsed ? "Sign Out" : undefined}
                     className={clsx(
-                        "flex items-center w-full text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all",
-                        isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3"
+                        "flex items-center rounded-xl transition-all duration-200 group",
+                        isCollapsed ? "justify-center p-3" : "gap-3 px-4 py-3",
+                        "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 font-medium"
                     )}
+                    title={isCollapsed ? "Sign Out" : undefined}
                 >
-                    <LogOut className="w-5 h-5 flex-shrink-0" />
-                    {!isCollapsed && <span className="font-medium whitespace-nowrap animate-in fade-in duration-300">Sign Out</span>}
+                    <LogOut className="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:-translate-x-1" />
+                    {!isCollapsed && <span className="whitespace-nowrap">Sign Out</span>}
                 </button>
             </div>
         </aside>

@@ -20,6 +20,7 @@ class User(Base, IDMixin, TimestampMixin):
     last_login_ip: Mapped[str] = mapped_column(INET, nullable=True)
     password_reset_token: Mapped[str] = mapped_column(String(255), nullable=True)
     password_reset_expires: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    avatar_url: Mapped[str] = mapped_column(String(500), nullable=True)
     
     person_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("persons.id", ondelete="SET NULL"), nullable=True)
 

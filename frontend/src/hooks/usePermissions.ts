@@ -6,17 +6,15 @@ export const usePermissions = () => {
     const { user } = useAuthStore();
 
     const hasPermission = useCallback((permission: string): boolean => {
-
         if (!user) return false;
 
         // Platform Admins and Tenant Admins have all permissions
         if (user.is_platform_admin || user.is_tenant_admin) return true;
 
-        // Check across all entities for non-tenant admins
-        if (user.entity_access) {
-            return user.entity_access.some(access => 
-                access.permissions?.includes(permission)
-            );
+        // Check specifically for the currently selected entity
+        if (user.entity_access && user.selected_entity_id) {
+            const currentAccess = user.entity_access.find(a => a.entity_id === user.selected_entity_id);
+            return currentAccess?.permissions?.includes(permission) || false;
         }
 
         return false;

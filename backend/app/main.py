@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.platform import auth as platform_auth
-from app.api.v1 import auth, payroll, reporting, employees, attendance, leave, users, entities, roles, masters, ket, audit, dashboard
+from app.api.v1 import auth, profile, payroll, reporting, employees, attendance, leave, users, entities, roles, masters, ket, audit, dashboard
 import os
 
 app = FastAPI(
@@ -49,11 +49,17 @@ app.include_router(masters.router, prefix="/api/v1/masters", tags=["Master Data"
 app.include_router(ket.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(profile.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
     # TODO: Add DB and Redis health checks
     return {"status": "healthy"}
+
+# Mount uploads directory
+uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # Serve Frontend Static Files
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")

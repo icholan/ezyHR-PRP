@@ -19,6 +19,7 @@ class UserEntityAccessRead(UserEntityAccessBase):
     granted_at: datetime
     role_name: Optional[str] = None
     permissions: List[str] = []
+    employment_id: Optional[UUID] = None
     
     class Config:
         from_attributes = True
@@ -30,6 +31,7 @@ class UserBase(BaseModel):
     is_platform_admin: bool = False
     is_active: bool = True
     person_id: Optional[UUID] = None
+    avatar_url: Optional[str] = None
 
 class UserCreate(UserBase):
     password: Optional[str] = None
@@ -42,6 +44,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
     person_id: Optional[UUID] = None
+    avatar_url: Optional[str] = None
     entity_access: Optional[List[UserEntityAccessCreate]] = None
 
 class UserRead(UserBase):

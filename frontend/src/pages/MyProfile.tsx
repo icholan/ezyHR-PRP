@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Phone, MapPin, Briefcase, Mail, Shield, Building2, Wallet, Contact } from 'lucide-react';
+import { User, Phone, MapPin, Briefcase, Mail, Shield, Building2, Wallet, Contact, Camera, Lock } from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import PasswordModal from '../components/Shared/PasswordModal';
 
 const MyProfile = () => {
     const [profile, setProfile] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    
+    const { user: authUser, updateUser } = useAuthStore();
     
     // Editable personal states
     const [contactNumber, setContactNumber] = useState('');
@@ -16,6 +20,9 @@ const MyProfile = () => {
     const [emergencyContactName, setEmergencyContactName] = useState('');
     const [emergencyContactRelation, setEmergencyContactRelation] = useState('');
     const [emergencyContactNumber, setEmergencyContactNumber] = useState('');
+
+    // Password change states
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
 
     useEffect(() => {
         fetchProfile();
@@ -38,9 +45,29 @@ const MyProfile = () => {
             }
         } catch (err) {
             console.error('Error fetching profile:', err);
-            toast.error('Failed to load profile details.');
+            // Don't show error toast here as some users might not have profiles
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const resp = await api.post('/api/v1/profile/avatar', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            const newAvatarUrl = resp.data.avatar_url;
+            updateUser({ avatar_url: newAvatarUrl });
+            toast.success('Profile picture updated!');
+        } catch (err) {
+            console.error('Avatar upload failed:', err);
+            toast.error('Failed to upload image.');
         }
     };
 
@@ -81,9 +108,25 @@ const MyProfile = () => {
 
     if (!profile) {
         return (
-            <div className="text-center py-12 text-gray-500">
-                <User className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>No profile information available.</p>
+            <div className="flex flex-col items-center justify-center py-20 px-6 max-w-md mx-auto text-center">
+                <div className="w-20 h-20 rounded-3xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 mb-6">
+                    <User className="w-10 h-10" />
+                </div>
+                <h1 className="text-2xl font-black text-dark-950 dark:text-gray-50 mb-3">No Profile Found</h1>
+                <p className="text-gray-500 mb-8 leading-relaxed">
+                    You don't have an associated employee record. You can still manage your account security.
+                </p>
+                <button 
+                    onClick={() => setShowPasswordModal(true)}
+                    className="flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-primary-600 text-white font-bold shadow-lg shadow-primary-500/20 hover:bg-primary-700 transition-all w-full justify-center"
+                >
+                    <Lock className="w-5 h-5" /> Change Password
+                </button>
+
+                <PasswordModal 
+                    isOpen={showPasswordModal} 
+                    onClose={() => setShowPasswordModal(false)} 
+                />
             </div>
         );
     }
@@ -94,17 +137,41 @@ const MyProfile = () => {
         <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-500">
             {/* Header */}
             <div className="bg-white dark:bg-gray-900 rounded-[32px] p-8 flex items-center gap-6 shadow-xl shadow-gray-200/20 dark:shadow-gray-900/50">
-                <div className="w-24 h-24 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 text-3xl font-black shrink-0 shadow-inner">
-                    {person.full_name?.charAt(0) || <User />}
+                <div className="relative group">
+                    <div className="w-24 h-24 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 text-3xl font-black shrink-0 shadow-inner overflow-hidden border-4 border-white dark:border-gray-800">
+                        {authUser?.avatar_url ? (
+                            <img 
+                                src={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${authUser.avatar_url}`} 
+                                alt="Profile" 
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            person.full_name?.charAt(0) || <User />
+                        )}
+                    </div>
+                    <label className="absolute bottom-0 right-0 p-2 bg-primary-600 text-white rounded-full cursor-pointer shadow-lg hover:bg-primary-700 transition-all opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0">
+                        <Camera className="w-4 h-4" />
+                        <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
+                    </label>
                 </div>
-                <div>
+                <div className="flex-1">
                     <h1 className="text-3xl font-black font-premium text-dark-950 dark:text-gray-50">{person.full_name}</h1>
                     <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-gray-500">
-                        <span className="flex items-center gap-1"><Briefcase className="w-4 h-4"/> {employment.job_title}</span>
-                        <span className="flex items-center gap-1"><Shield className="w-4 h-4"/> {employment.employee_code}</span>
-                        <span className="flex items-center gap-1"><Building2 className="w-4 h-4"/> {employment.department_name || 'No Dept'}</span>
+                        {employment && (
+                            <>
+                                <span className="flex items-center gap-1"><Briefcase className="w-4 h-4"/> {employment.job_title}</span>
+                                <span className="flex items-center gap-1"><Shield className="w-4 h-4"/> {employment.employee_code}</span>
+                                <span className="flex items-center gap-1"><Building2 className="w-4 h-4"/> {employment.department_name || 'No Dept'}</span>
+                            </>
+                        )}
                     </div>
                 </div>
+                <button 
+                    onClick={() => setShowPasswordModal(true)}
+                    className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                >
+                    <Lock className="w-4 h-4" /> Change Password
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -172,34 +239,36 @@ const MyProfile = () => {
 
                 {/* Employment & Sensitive Information (Read-Only) */}
                 <div className="space-y-6">
-                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-[32px] p-8 shadow-inner border border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400">
-                        <h2 className="text-xl font-bold font-premium text-dark-900 dark:text-gray-100 flex items-center gap-2 mb-6">
-                            <Briefcase className="w-5 h-5 text-gray-400"/> Employment Details
-                        </h2>
-                        <div className="space-y-4 text-sm">
-                            <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
-                                <span className="font-medium">Employment Type</span>
-                                <span className="text-dark-950 dark:text-gray-200">{employment.employment_type}</span>
+                    {employment && (
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-[32px] p-8 shadow-inner border border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400">
+                            <h2 className="text-xl font-bold font-premium text-dark-900 dark:text-gray-100 flex items-center gap-2 mb-6">
+                                <Briefcase className="w-5 h-5 text-gray-400"/> Employment Details
+                            </h2>
+                            <div className="space-y-4 text-sm">
+                                <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
+                                    <span className="font-medium">Employment Type</span>
+                                    <span className="text-dark-950 dark:text-gray-200">{employment.employment_type}</span>
+                                </div>
+                                <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
+                                    <span className="font-medium">Join Date</span>
+                                    <span className="text-dark-950 dark:text-gray-200">{employment.join_date}</span>
+                                </div>
+                                <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
+                                    <span className="font-medium">Designation</span>
+                                    <span className="text-dark-950 dark:text-gray-200">{employment.designation || '-'}</span>
+                                </div>
+                                <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
+                                    <span className="font-medium">Work Location</span>
+                                    <span className="text-dark-950 dark:text-gray-200">{employment.work_location || '-'}</span>
+                                </div>
+                                <div className="flex justify-between py-2">
+                                    <span className="font-medium">Notice Period</span>
+                                    <span className="text-dark-950 dark:text-gray-200">{employment.notice_period || '-'} months</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
-                                <span className="font-medium">Join Date</span>
-                                <span className="text-dark-950 dark:text-gray-200">{employment.join_date}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
-                                <span className="font-medium">Designation</span>
-                                <span className="text-dark-950 dark:text-gray-200">{employment.designation || '-'}</span>
-                            </div>
-                            <div className="flex justify-between py-2 border-b border-gray-200 dark:border-gray-700/50">
-                                <span className="font-medium">Work Location</span>
-                                <span className="text-dark-950 dark:text-gray-200">{employment.work_location || '-'}</span>
-                            </div>
-                            <div className="flex justify-between py-2">
-                                <span className="font-medium">Notice Period</span>
-                                <span className="text-dark-950 dark:text-gray-200">{employment.notice_period || '-'} months</span>
-                            </div>
+                            <p className="mt-4 text-xs italic text-gray-400">Please contact HR to update employment details.</p>
                         </div>
-                        <p className="mt-4 text-xs italic text-gray-400">Please contact HR to update employment details.</p>
-                    </div>
+                    )}
 
                     <div className="bg-gray-50 dark:bg-gray-800/50 rounded-[32px] p-8 shadow-inner border border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400">
                         <h2 className="text-xl font-bold font-premium text-dark-900 dark:text-gray-100 flex items-center gap-2 mb-6">
@@ -226,6 +295,11 @@ const MyProfile = () => {
                     </div>
                 </div>
             </div>
+
+            <PasswordModal 
+                isOpen={showPasswordModal} 
+                onClose={() => setShowPasswordModal(false)} 
+            />
         </div>
     );
 };
