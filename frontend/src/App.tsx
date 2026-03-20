@@ -47,6 +47,7 @@ import MyPayslips from './pages/MyPayslips';
 import MyClaims from './pages/Claims/MyClaims';
 import TeamClaims from './pages/Claims/TeamClaims';
 import ClaimsAdmin from './pages/Claims/ClaimsAdmin';
+import NotificationCentre from './pages/Notifications/NotificationCentre';
 import { useAuthStore } from './store/useAuthStore';
 
 const TenantIndexRedirect = () => {
@@ -79,6 +80,7 @@ function App() {
                     <Route path="claims/my" element={<MyClaims />} />
                     <Route path="attendance/clock" element={<TimeClock />} />
                     <Route path="attendance/history" element={<PunchHistory />} />
+                    <Route path="notifications" element={<NotificationCentre />} />
 
                     {/* Admin Only Routes */}
                     <Route element={<ProtectedRoute requireAdmin={true}><Outlet /></ProtectedRoute>}>

@@ -28,6 +28,11 @@ async def get_dashboard_stats(
     """
     tenant_id = current_user.tenant_id
     
+    # 0. Sync Document Expiry Notifications
+    from app.services.notification import NotificationService
+    notif_service = NotificationService(db)
+    await notif_service.check_and_notify_document_expiry(tenant_id)
+
     # 1. Total Employees
     emp_stmt = select(func.count(Employment.id)).join(Person, Employment.person_id == Person.id)
     emp_stmt = emp_stmt.where(Person.tenant_id == tenant_id, Employment.is_active == True)

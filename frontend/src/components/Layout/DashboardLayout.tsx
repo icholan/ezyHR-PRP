@@ -9,6 +9,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import PasswordModal from '../Shared/PasswordModal';
+import { NotificationBell } from './NotificationBell';
 
 const DashboardLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -72,10 +73,7 @@ const DashboardLayout = () => {
                     <div className="flex items-center gap-2 sm:gap-4">
                         <ThemeToggle />
 
-                        <button className="w-10 h-10 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all relative">
-                            <Bell className="w-5 h-5" />
-                            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-gray-900" />
-                        </button>
+                        <NotificationBell />
 
                         {!user?.is_tenant_admin && (
                             <button 
