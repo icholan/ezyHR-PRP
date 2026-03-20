@@ -3,6 +3,8 @@ import { Upload, FileSpreadsheet, Download, AlertCircle, CheckCircle2, X, FileTe
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/useAuthStore';
+import { usePermissions } from '../../hooks/usePermissions';
+import { Permission } from '../../types/permissions';
 import toast from 'react-hot-toast';
 
 interface PreviewRow {
@@ -50,6 +52,8 @@ const ImportTimesheet: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const activeEntityId = useAuthStore(state => state.user?.selected_entity_id);
+    const { hasPermission } = usePermissions();
+    const canImport = hasPermission(Permission.IMPORT_TIMESHEET);
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -114,6 +118,21 @@ const ImportTimesheet: React.FC = () => {
             toast.error('Failed to download template');
         }
     };
+
+    if (!canImport) {
+        return (
+            <div className="p-12 text-center bg-white dark:bg-gray-900 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/10">
+                <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <AlertCircle className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Access Denied</h3>
+                <p className="mt-2 text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                    You do not have the required permissions to import timesheets for this entity.
+                    Please contact your administrator if you believe this is an error.
+                </p>
+            </div>
+        );
+    }
 
     const handlePreview = async () => {
         if (!file || !activeEntityId) return;

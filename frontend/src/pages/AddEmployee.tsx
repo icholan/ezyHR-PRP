@@ -803,7 +803,7 @@ const AddEmployee = () => {
                                                 inputClassName="border-blue-200 focus:border-blue-400"
                                             />
                                             <div className="space-y-2">
-                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Foreign Worker Levy ($)</label>
+                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Foreign Worker Levy (S$)</label>
                                                 <div className="relative">
                                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</div>
                                                     <input
@@ -1144,7 +1144,7 @@ const AddEmployee = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-6">
                                     <div className="space-y-2">
-                                        <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Monthly Basic Salary (SGD){req}</label>
+                                        <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Monthly Basic Salary (S$){req}</label>
                                         <div className="relative">
                                             <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
                                             <input
@@ -1307,7 +1307,7 @@ const AddEmployee = () => {
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Amount (SGD)</label>
+                                                        <label className="text-[10px] font-bold text-gray-400 uppercase">Amount (S$)</label>
                                                         <div className="relative">
                                                             <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                                             <input

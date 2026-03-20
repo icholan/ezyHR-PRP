@@ -7,7 +7,8 @@ from .leave import LeaveType, LeaveEntitlement, LeaveRequest, LeavePool, Statuto
 from .statutory import CPFRateConfig, CPFSubmission, SHGRateConfig, SDLRateConfig
 from .attendance import Shift, ShiftRoster, AttendanceRecord, MonthlyOTSummary, PublicHoliday
 from .ai import AIAuditFlag, AIChatSession, AIAttritionScore
-from .tax_claims import IR8ARecord, ClaimApplication, WorkPass
+from .tax_claims import IR8ARecord, WorkPass
+from .claims import ClaimCategory, ClaimRequest, ClaimReceipt
 from .system import Subscription, AuditLog, Notification, DocumentStorage
 from .ket import KeyEmploymentTerm
 
@@ -22,7 +23,7 @@ __all__ = [
     "CPFRateConfig", "CPFSubmission", "SHGRateConfig", "SDLRateConfig",
     "Shift", "ShiftRoster", "AttendanceRecord", "MonthlyOTSummary", "PublicHoliday",
     "AIAuditFlag", "AIChatSession", "AIAttritionScore",
-    "IR8ARecord", "ClaimApplication", "WorkPass",
+    "IR8ARecord", "ClaimCategory", "ClaimRequest", "ClaimReceipt", "WorkPass",
     "Subscription", "AuditLog", "Notification", "DocumentStorage",
     "KeyEmploymentTerm"
 ]

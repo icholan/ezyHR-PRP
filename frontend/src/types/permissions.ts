@@ -13,8 +13,15 @@ export enum Permission {
     MANAGE_MULTI_ENTITY = 'manage_multi_entity',
     MANAGE_TEAM_LEAVE = 'manage_team_leave',
     MANAGE_MASTER_DATA = 'manage_master_data',
+    VIEW_ATTENDANCE = 'view_attendance',
+    EDIT_ATTENDANCE = 'edit_attendance',
+    MANAGE_SHIFTS = 'manage_shifts',
+    IMPORT_TIMESHEET = 'import_timesheet',
+    MANAGE_ROSTER = 'manage_roster',
+    VIEW_ATTENDANCE_LOGS = 'view_attendance_logs',
     MANAGE_KET = 'manage_ket',
+    SUBMIT_CLAIM = 'submit_claim',
+    APPROVE_CLAIM = 'approve_claim',
+    SUBMIT_TEAM_CLAIM = 'submit_team_claim',
+    MANAGE_CLAIM_CATEGORIES = 'manage_claim_categories',
 }
-
-
-

@@ -106,7 +106,14 @@ class TenantProvisioningService:
         )
         self.db.add(manager_role)
         
-        manager_perms = [Permission.VIEW_EMPLOYEES, Permission.VIEW_ATTENDANCE, Permission.EDIT_ATTENDANCE, Permission.APPROVE_LEAVE, Permission.VIEW_LEAVE]
+        manager_perms = [
+            Permission.VIEW_EMPLOYEES, 
+            Permission.VIEW_ATTENDANCE, 
+            Permission.EDIT_ATTENDANCE, 
+            Permission.APPROVE_LEAVE, 
+            Permission.VIEW_LEAVE,
+            Permission.SUBMIT_TEAM_CLAIM
+        ]
         for perm in manager_perms:
             self.db.add(RolePermission(role_id=manager_role_id, permission=perm.value))
         

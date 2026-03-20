@@ -17,6 +17,7 @@ from app.schemas.attendance import (
 )
 from app.services.attendance import AttendanceService
 from app.models.auth import User
+from app.core.security.permissions import Permission
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
 
@@ -54,11 +55,8 @@ async def process_daily(
     current_user: User = Depends(get_current_user)
 ):
     # Only Admin or HR Manager can trigger processing
-    if not current_user.is_tenant_admin:
-        from app.api.v1.dependencies import get_entity_access
-        role = await get_entity_access(entity_id, current_user, db)
-        if role != "hr_admin":
-            raise HTTPException(status_code=403, detail="Not enough permissions")
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.VIEW_ATTENDANCE_LOGS)(entity_id, current_user, db)
             
     service = AttendanceService(db)
     await service.compute_daily_attendance(entity_id, work_date)
@@ -74,6 +72,8 @@ async def get_daily_attendance(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.VIEW_ATTENDANCE_LOGS)(entity_id, current_user, db)
     from app.models.attendance import DailyAttendance, Shift
     from app.models.employment import Employment, Person
     from sqlalchemy import and_, select
@@ -137,16 +137,21 @@ async def list_attendance_records(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.VIEW_ATTENDANCE_LOGS)(entity_id, current_user, db)
     
     service = AttendanceService(db)
     return await service.get_attendance_records(entity_id, start_date, end_date, employment_id)
 
 @router.get("/import/template")
 async def download_timesheet_template(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from app.api.v1.dependencies import has_any_entity_permission
+    if not await has_any_entity_permission(db, current_user, Permission.IMPORT_TIMESHEET):
+        raise HTTPException(status_code=403, detail="Not enough permissions to import timesheets")
+        
     from fastapi.responses import Response
     import io
     from openpyxl import Workbook
@@ -221,13 +226,8 @@ async def preview_timesheet(
     current_user: User = Depends(get_current_user)
 ):
     import fastapi
-    from app.api.v1.dependencies import get_entity_access
-    
-    # Must be HR Admin or full admin
-    if not current_user.is_tenant_admin:
-        role = await get_entity_access(entity_id, current_user, db)
-        if role != "hr_admin":
-            raise HTTPException(status_code=403, detail="Not enough permissions to import timesheets")
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.IMPORT_TIMESHEET)(entity_id, current_user, db)
             
     if not file.filename.endswith(('.csv', '.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only CSV or Excel files are accepted")
@@ -250,13 +250,8 @@ async def confirm_timesheet(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    
-    # Must be HR Admin or full admin
-    if not current_user.is_tenant_admin:
-        role = await get_entity_access(payload.entity_id, current_user, db)
-        if role != "hr_admin":
-            raise HTTPException(status_code=403, detail="Not enough permissions to import timesheets")
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.IMPORT_TIMESHEET)(payload.entity_id, current_user, db)
 
     service = AttendanceService(db)
     try:
@@ -277,8 +272,8 @@ async def create_manual_record(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(data.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.VIEW_ATTENDANCE_LOGS)(data.entity_id, current_user, db)
     
     service = AttendanceService(db)
     record = await service.create_manual_punch(data, user_id=current_user.id, ip_address=req.client.host if req.client else None)
@@ -303,8 +298,8 @@ async def update_attendance_record(
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
         
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(record.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.VIEW_ATTENDANCE_LOGS)(record.entity_id, current_user, db)
     
     updated = await service.update_attendance_record(record_id, data, user_id=current_user.id, ip_address=req.client.host if req.client else None)
     await db.commit()
@@ -326,8 +321,8 @@ async def delete_attendance_record(
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
         
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(record.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.VIEW_ATTENDANCE_LOGS)(record.entity_id, current_user, db)
     
     await service.delete_attendance_record(record_id, user_id=current_user.id, ip_address=req.client.host if req.client else None)
     await db.commit()
@@ -341,8 +336,8 @@ async def create_shift(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(shift_in.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_SHIFTS)(shift_in.entity_id, current_user, db)
     
     service = AttendanceService(db)
     shift = await service.create_shift(shift_in, user_id=current_user.id)
@@ -355,8 +350,8 @@ async def list_shifts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_SHIFTS)(entity_id, current_user, db)
     
     service = AttendanceService(db)
     return await service.get_shifts(entity_id)
@@ -373,8 +368,8 @@ async def update_shift(
     if not shift:
         raise HTTPException(status_code=404, detail="Shift not found")
         
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(shift.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_SHIFTS)(shift.entity_id, current_user, db)
     
     updated_shift = await service.update_shift(shift_id, shift_update, user_id=current_user.id)
     await db.commit()
@@ -391,8 +386,8 @@ async def delete_shift(
     if not shift:
         raise HTTPException(status_code=404, detail="Shift not found")
         
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(shift.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_SHIFTS)(shift.entity_id, current_user, db)
     
     await service.delete_shift(shift_id, user_id=current_user.id)
     await db.commit()
@@ -412,8 +407,8 @@ async def bulk_update_breaks(
     shift = await service.get_shift(shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Shift not found")
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(shift.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_SHIFTS)(shift.entity_id, current_user, db)
     
     updated_breaks = await service.replace_shift_breaks(shift_id, breaks, user_id=current_user.id)
     await db.commit()
@@ -439,8 +434,8 @@ async def delete_break(
     shift = await service.get_shift(shift_id)
     if not shift:
         raise HTTPException(status_code=404, detail="Shift not found")
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(shift.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_SHIFTS)(shift.entity_id, current_user, db)
     
     await service.delete_shift_break(break_id)
     await db.commit()
@@ -457,8 +452,8 @@ async def list_roster(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_ROSTER)(entity_id, current_user, db)
     
     service = AttendanceService(db)
     return await service.get_roster_enriched(entity_id, start_date, end_date, employment_id)
@@ -470,8 +465,8 @@ async def auto_generate_roster(
     current_user: User = Depends(get_current_user)
 ):
     """Smart roster generation using Employment rest_day and working_days_per_week."""
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(data.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_ROSTER)(data.entity_id, current_user, db)
     
     service = AttendanceService(db)
     rosters = await service.auto_generate_roster(data, user_id=current_user.id)
@@ -485,8 +480,8 @@ async def clear_roster(
     current_user: User = Depends(get_current_user)
 ):
     """Bulk clear roster for given employees and date range."""
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(data.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_ROSTER)(data.entity_id, current_user, db)
     
     service = AttendanceService(db)
     deleted_count = await service.clear_roster(data)
@@ -499,8 +494,8 @@ async def bulk_assign_roster(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.api.v1.dependencies import get_entity_access
-    await get_entity_access(bulk_data.entity_id, current_user, db)
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_ROSTER)(bulk_data.entity_id, current_user, db)
     
     service = AttendanceService(db)
     rosters = await service.assign_roster_bulk(bulk_data, user_id=current_user.id)
@@ -515,6 +510,19 @@ async def update_roster_cell(
     current_user: User = Depends(get_current_user)
 ):
     service = AttendanceService(db)
+    
+    # Check access
+    from app.models.attendance import ShiftRoster
+    from sqlalchemy import select
+    stmt = select(ShiftRoster).where(ShiftRoster.id == roster_id)
+    result = await db.execute(stmt)
+    roster_entry = result.scalar_one_or_none()
+    if not roster_entry:
+        raise HTTPException(status_code=404, detail="Roster entry not found")
+        
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_ROSTER)(roster_entry.entity_id, current_user, db)
+    
     roster = await service.update_roster_cell(roster_id, cell_update.shift_id, cell_update.day_type, user_id=current_user.id)
     if not roster:
         raise HTTPException(status_code=404, detail="Roster entry not found")
@@ -528,6 +536,19 @@ async def delete_roster_cell(
     current_user: User = Depends(get_current_user)
 ):
     service = AttendanceService(db)
+    
+    # Check access
+    from app.models.attendance import ShiftRoster
+    from sqlalchemy import select
+    stmt = select(ShiftRoster).where(ShiftRoster.id == roster_id)
+    result = await db.execute(stmt)
+    roster_entry = result.scalar_one_or_none()
+    if not roster_entry:
+        raise HTTPException(status_code=404, detail="Roster entry not found")
+        
+    from app.api.v1.dependencies import require_permission
+    await require_permission(Permission.MANAGE_ROSTER)(roster_entry.entity_id, current_user, db)
+    
     deleted = await service.delete_roster_cell(roster_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Roster entry not found")

@@ -3,10 +3,10 @@ import api from '../../services/api';
 import { useAuthStore } from '../../store/useAuthStore';
 import {
     Plus, Pencil, Trash2, ShieldAlert, X,
-    Shield, Search, CheckCircle2, ChevronRight,
-    Users, Lock, Layout, Activity,
-    Eye, Edit, Trash, Building2, ShieldCheck, BookOpen, FileText
-
+    Shield, Search, CheckCircle2, ChevronRight, ListChecks,
+    Users, Lock, Layout, Activity, Upload, Calendar,
+    Eye, Edit, Trash, Building2, ShieldCheck, BookOpen, FileText,
+    ClipboardCheck, Receipt, Settings2
 } from 'lucide-react';
 
 
@@ -37,6 +37,9 @@ const AVAILABLE_PERMISSIONS = [
     { id: 'view_attendance', label: 'View Attendance', group: 'Attendance', icon: Eye },
     { id: 'edit_attendance', label: 'Edit Attendance', group: 'Attendance', icon: Edit },
     { id: 'manage_shifts', label: 'Manage Shifts', group: 'Attendance', icon: Layout },
+    { id: 'import_timesheet', label: 'Import Timesheet', group: 'Attendance', icon: Upload },
+    { id: 'manage_roster', label: 'Manage Roster', group: 'Attendance', icon: Calendar },
+    { id: 'view_attendance_logs', label: 'View Attendance Logs', group: 'Attendance', icon: ListChecks },
     { id: 'view_leave', label: 'View Leave', group: 'Leave Management', icon: Eye },
     { id: 'approve_leave', label: 'Approve Leave', group: 'Leave Management', icon: CheckCircle2 },
     { id: 'manage_leave_types', label: 'Manage Leave Types', group: 'Leave Management', icon: Layout },
@@ -46,6 +49,10 @@ const AVAILABLE_PERMISSIONS = [
     { id: 'manage_roles', label: 'Manage Roles', group: 'System', icon: Lock },
     { id: 'manage_multi_entity', label: 'Multi-Entity Management', group: 'System', icon: Building2 },
     { id: 'manage_master_data', label: 'Master Data Management', group: 'System', icon: BookOpen },
+    { id: 'submit_claim', label: 'Submit Claim', group: 'Claims Management', icon: Receipt },
+    { id: 'approve_claim', label: 'Approve Claim', group: 'Claims Management', icon: ClipboardCheck },
+    { id: 'submit_team_claim', label: 'Submit Team Claim', group: 'Claims Management', icon: Users },
+    { id: 'manage_claim_categories', label: 'Manage Claim Categories', group: 'Claims Management', icon: Settings2 },
 ];
 
 

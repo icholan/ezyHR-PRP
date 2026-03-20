@@ -46,6 +46,12 @@ export const useAuthStore = create<AuthState>()(
             privacyMode: false,
             login: (user, token) => {
                 localStorage.setItem('token', token);
+                
+                // Auto-select first entity if none is selected
+                if (!user.selected_entity_id && user.entity_access?.length) {
+                    user.selected_entity_id = user.entity_access[0].entity_id;
+                }
+                
                 set({ user, token, isAuthenticated: true });
             },
             updateUser: (userData) => {

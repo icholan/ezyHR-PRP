@@ -17,12 +17,21 @@ class Permission(str, Enum):
     VIEW_ATTENDANCE = "view_attendance"
     EDIT_ATTENDANCE = "edit_attendance"
     MANAGE_SHIFTS = "manage_shifts"
+    IMPORT_TIMESHEET = "import_timesheet"
+    MANAGE_ROSTER = "manage_roster"
+    VIEW_ATTENDANCE_LOGS = "view_attendance_logs"
     
     # Leave Management
     VIEW_LEAVE = "view_leave"
     APPROVE_LEAVE = "approve_leave"
     MANAGE_LEAVE_TYPES = "manage_leave_types"
     MANAGE_TEAM_LEAVE = "manage_team_leave"
+
+    # Claims
+    SUBMIT_CLAIM = "submit_claim"
+    APPROVE_CLAIM = "approve_claim"
+    SUBMIT_TEAM_CLAIM = "submit_team_claim"
+    MANAGE_CLAIM_CATEGORIES = "manage_claim_categories"
 
     
     # System & Settings
@@ -49,13 +58,23 @@ PERMISSION_GROUPS = {
     "Time & Attendance": [
         Permission.VIEW_ATTENDANCE,
         Permission.EDIT_ATTENDANCE,
-        Permission.MANAGE_SHIFTS
+        Permission.MANAGE_SHIFTS,
+        Permission.IMPORT_TIMESHEET,
+        Permission.MANAGE_ROSTER,
+        Permission.VIEW_ATTENDANCE_LOGS
     ],
     "Leave Management": [
         Permission.VIEW_LEAVE,
         Permission.APPROVE_LEAVE,
         Permission.MANAGE_LEAVE_TYPES,
         Permission.MANAGE_TEAM_LEAVE
+    ],
+
+    "Claims": [
+        Permission.SUBMIT_CLAIM,
+        Permission.APPROVE_CLAIM,
+        Permission.SUBMIT_TEAM_CLAIM,
+        Permission.MANAGE_CLAIM_CATEGORIES
     ],
 
     "Settings & Reports": [

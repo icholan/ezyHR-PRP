@@ -17,7 +17,9 @@ import {
     BookOpen,
     User,
     History as HistoryIcon,
-    Link as LinkIcon
+    Link as LinkIcon,
+    Receipt,
+    ClipboardCheck
 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +35,8 @@ const menuGroups = [
             { icon: LayoutDashboard, label: 'Overview', path: '/dashboard', isAdmin: true },
             { icon: LayoutDashboard, label: 'My Dashboard', path: '/me', isEmployeeOnly: true, requiresEmployment: true },
             { icon: User, label: 'My Profile', path: '/profile', requiresEmployment: true },
+            { icon: Calendar, label: 'My Leave', path: '/leave/my', requiresEmployment: true },
+            { icon: Receipt, label: 'My Claims', path: '/claims/my', requiresEmployment: true },
             { icon: Wallet, label: 'My Payslips', path: '/me/payslips', isEmployeeOnly: true, requiresEmployment: true },
             { icon: ShieldCheck, label: 'Audit Trail', path: '/audit', isAdmin: true },
             { icon: FileText, label: 'Reports', path: '/reports', isAdmin: true },
@@ -45,7 +49,8 @@ const menuGroups = [
             { icon: LinkIcon, label: 'Multi-Entity Linking', path: '/employees/multi-management', isAdmin: true },
             { icon: Wallet, label: 'Payroll', path: '/payroll', isAdmin: true },
             { icon: FileText, label: 'KET Management', path: '/ket', isAdmin: true },
-            { icon: Calendar, label: 'My Leave', path: '/leave/my', requiresEmployment: true },
+            { icon: ClipboardCheck, label: 'Claims Approval', path: '/claims/admin', isAdmin: true },
+            { icon: Receipt, label: 'Team Claims', path: '/claims/team', isAdmin: true },
         ]
     },
     {
@@ -166,6 +171,32 @@ const Sidebar = ({ onClose }: SidebarProps) => {
                             if (item.path === '/ket') {
                                 return hasPermission(Permission.MANAGE_KET);
                             }
+
+                            // Special case for Import Timesheet
+                            if (item.path === '/attendance/import') {
+                                return hasPermission(Permission.IMPORT_TIMESHEET);
+                            }
+
+                            // Special case for Roster
+                            if (item.path === '/attendance/roster') {
+                                return hasPermission(Permission.MANAGE_ROSTER);
+                            }
+
+                            // Special case for Attendance Logs
+                            if (item.path === '/attendance/logs') {
+                                return hasPermission(Permission.VIEW_ATTENDANCE_LOGS);
+                            }
+
+                            // Special case for Claims Admin
+                            if (item.path === '/claims/admin') {
+                                return hasPermission(Permission.APPROVE_CLAIM);
+                            }
+
+                            // Special case for Team Claims
+                            if (item.path === '/claims/team') {
+                                return hasPermission(Permission.SUBMIT_TEAM_CLAIM);
+                            }
+
 
                             if ((item as any).isAdmin && !hasAdminAccess) return false;
 

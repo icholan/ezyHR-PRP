@@ -7,6 +7,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/useAuthStore';
+import { usePermissions } from '../../hooks/usePermissions';
+import { Permission } from '../../types/permissions';
 import toast from 'react-hot-toast';
 
 interface AttendanceLog {
@@ -39,6 +41,8 @@ const AttendanceLogs: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
 
     const activeEntityId = useAuthStore(state => state.user?.selected_entity_id);
+    const { hasPermission } = usePermissions();
+    const canViewLogs = hasPermission(Permission.VIEW_ATTENDANCE_LOGS);
 
     const fetchLogs = async () => {
         if (!activeEntityId) return;
@@ -88,6 +92,21 @@ const AttendanceLogs: React.FC = () => {
     const filteredLogs = logs.filter(log =>
         log.employee_name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    if (!canViewLogs) {
+        return (
+            <div className="p-12 text-center bg-white dark:bg-gray-900 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/10">
+                <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <AlertCircle className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-dark-950 dark:text-gray-50">Access Denied</h3>
+                <p className="mt-2 text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
+                    You do not have the required permissions to view attendance logs for this entity.
+                    Please contact your administrator if you believe this is an error.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">

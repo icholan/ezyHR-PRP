@@ -139,12 +139,12 @@ const Payslip = () => {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between pb-2 border-b-2 border-primary-100">
                                 <h3 className="text-xs font-black text-primary-600 uppercase tracking-widest">Items of Earnings</h3>
-                                <span className="text-xs font-black text-primary-600 uppercase tracking-widest">Amount (SGD)</span>
+                                <span className="text-xs font-black text-primary-600 uppercase tracking-widest">Amount (S$)</span>
                             </div>
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center group">
                                     <span className="text-sm font-medium text-gray-600">Basic Salary</span>
-                                    <span className="text-sm font-black text-dark-950">${Number(record.basic_salary).toFixed(2)}</span>
+                                    <span className="text-sm font-black text-dark-950">S${Number(record.basic_salary).toFixed(2)}</span>
                                 </div>
                                 {record.overtime_pay > 0 && (
                                     <div className="space-y-2 py-3 bg-gray-50/50 rounded-xl px-3 border border-gray-100/50">
@@ -169,7 +169,7 @@ const Payslip = () => {
 
                                         <div className="flex justify-between items-center pt-2 mt-2 border-t border-gray-100">
                                             <span className="text-sm font-bold text-dark-950 px-2 bg-primary-100/50 rounded-lg text-primary-700">Total OT Pay</span>
-                                            <span className="text-sm font-black text-dark-950">${Number(record.overtime_pay).toFixed(2)}</span>
+                                            <span className="text-sm font-black text-dark-950">S${Number(record.overtime_pay).toFixed(2)}</span>
                                         </div>
                                     </div>
                                 )}
@@ -197,7 +197,7 @@ const Payslip = () => {
                         {/* Total Gross */}
                         <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center border border-gray-100">
                             <span className="text-sm font-black text-dark-950 uppercase">Total Gross Pay</span>
-                            <span className="text-lg font-black text-dark-950">${Number(record.gross_salary).toFixed(2)}</span>
+                            <span className="text-lg font-black text-dark-950">S${Number(record.gross_salary).toFixed(2)}</span>
                         </div>
                     </div>
 
@@ -206,12 +206,12 @@ const Payslip = () => {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between pb-2 border-b-2 border-rose-100">
                                 <h3 className="text-xs font-black text-rose-600 uppercase tracking-widest">Deductions</h3>
-                                <span className="text-xs font-black text-rose-600 uppercase tracking-widest">Amount (SGD)</span>
+                                <span className="text-xs font-black text-rose-600 uppercase tracking-widest">Amount (S$)</span>
                             </div>
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm font-medium text-gray-600">Employee CPF (20%)</span>
-                                    <span className="text-sm font-black text-rose-600">-${Number(record.cpf_employee).toFixed(2)}</span>
+                                    <span className="text-sm font-black text-rose-600">-S${Number(record.cpf_employee).toFixed(2)}</span>
                                 </div>
                                 {record.shg_deduction > 0 && (
                                     <div className="flex justify-between items-center">
@@ -239,7 +239,7 @@ const Payslip = () => {
                             <div className="flex flex-col gap-1">
                                 <p className="text-[10px] font-black text-emerald-100 uppercase tracking-[0.2em] mb-1">Net Amount Payable</p>
                                 <div className="flex justify-between items-end">
-                                    <p className="text-4xl font-black font-['Outfit'] tracking-tighter">${Number(record.net_salary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                    <p className="text-4xl font-black font-['Outfit'] tracking-tighter">S${Number(record.net_salary).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     <div className="flex flex-col items-end opacity-80">
                                         <p className="text-[10px] font-bold">PAID VIA GIRO</p>
                                         <p className="text-[8px] font-medium">BANK: DBS/POSB</p>

@@ -45,11 +45,17 @@ const Login = () => {
                 setAdminId(response.data.admin_id || response.data.user_id);
                 setStep(2);
             } else {
-                loginToStore(response.data.user, response.data.access_token);
-                // Use a more robust check for redirection
-                const isPlatform = response.data.user?.is_platform_admin;
-                const isTenantAdmin = response.data.user?.is_tenant_admin;
-                const hasAdminAccess = isTenantAdmin || (response.data.user?.entity_access && response.data.user.entity_access.some((a: any) => a.role_name !== 'Employee'));
+                const user = response.data.user;
+                loginToStore(user, response.data.access_token);
+                
+                const isPlatform = user?.is_platform_admin;
+                const isTenantAdmin = user?.is_tenant_admin;
+                const selectedEntityId = user?.selected_entity_id;
+                
+                // Redirection based on selected entity's role
+                const selectedAccess = user?.entity_access?.find((a: any) => a.entity_id === selectedEntityId);
+                const hasAdminInSelectedEntity = selectedAccess && selectedAccess.role_name !== 'Employee';
+                const hasAdminAccess = isTenantAdmin || hasAdminInSelectedEntity;
 
                 if (isPlatform) {
                     window.location.href = '/admin';
@@ -85,10 +91,17 @@ const Login = () => {
                 : { user_id: adminId, code: mfaCode };
 
             const response = await api.post(verifyPath, payload);
-            loginToStore(response.data.user, response.data.access_token);
-            const isPlatform = response.data.user?.is_platform_admin;
-            const isTenantAdmin = response.data.user?.is_tenant_admin;
-            const hasAdminAccess = isTenantAdmin || (response.data.user?.entity_access && response.data.user.entity_access.some((a: any) => a.role_name !== 'Employee'));
+            const user = response.data.user;
+            loginToStore(user, response.data.access_token);
+            
+            const isPlatform = user?.is_platform_admin;
+            const isTenantAdmin = user?.is_tenant_admin;
+            const selectedEntityId = user?.selected_entity_id;
+
+            // Redirection based on selected entity's role
+            const selectedAccess = user?.entity_access?.find((a: any) => a.entity_id === selectedEntityId);
+            const hasAdminInSelectedEntity = selectedAccess && selectedAccess.role_name !== 'Employee';
+            const hasAdminAccess = isTenantAdmin || hasAdminInSelectedEntity;
 
             if (isPlatform) {
                 window.location.href = '/admin';

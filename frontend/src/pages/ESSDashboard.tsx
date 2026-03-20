@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import {
     Calendar, Clock, FileText, ChevronRight,
-    MapPin, Wallet, Briefcase, Palmtree
+    MapPin, Wallet, Briefcase, Palmtree, Receipt
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
@@ -11,6 +11,8 @@ const ESSDashboard = () => {
     const { user } = useAuthStore();
     const [leaveBalances, setLeaveBalances] = useState<any[]>([]);
     const [loadingLeave, setLoadingLeave] = useState(true);
+    const [claims, setClaims] = useState<any[]>([]);
+    const [loadingClaims, setLoadingClaims] = useState(true);
 
     useEffect(() => {
         const fetchLeave = async () => {
@@ -24,8 +26,24 @@ const ESSDashboard = () => {
             }
         };
 
+        const fetchClaims = async () => {
+            try {
+                if (user?.selected_entity_id) {
+                    const resp = await api.get('/api/v1/claims/my', {
+                        params: { entity_id: user.selected_entity_id }
+                    });
+                    setClaims(resp.data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch claims', err);
+            } finally {
+                setLoadingClaims(false);
+            }
+        };
+
         fetchLeave();
-    }, []);
+        fetchClaims();
+    }, [user?.selected_entity_id]);
 
     const greeting = () => {
         const hour = new Date().getHours();
@@ -84,7 +102,7 @@ const ESSDashboard = () => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {leaveBalances.slice(0, 4).map((bal, idx) => (
+                                {leaveBalances.slice(0, 4).map((bal: any, idx: number) => (
                                     <div key={idx} className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-5 border border-transparent dark:border-gray-800 hover:border-emerald-100 dark:hover:border-emerald-900/30 transition-colors">
                                         <p className="text-sm font-bold text-gray-500 mb-2">{bal.leave_type_name}</p>
                                         <div className="flex items-end justify-between">
@@ -99,7 +117,59 @@ const ESSDashboard = () => {
                         )}
                     </div>
 
-                    {/* Upcoming Shifts (Placeholder for now) */}
+                    {/* My Claims Overview */}
+                    <div className="bg-white dark:bg-gray-900 rounded-[32px] p-8 border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/20 dark:shadow-gray-900/50">
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-2xl">
+                                    <Receipt className="w-6 h-6" />
+                                </div>
+                                <h2 className="text-2xl font-bold font-premium text-dark-950 dark:text-gray-50">My Recent Claims</h2>
+                            </div>
+                            <Link to="/claims/my" className="text-sm font-bold text-primary-600 hover:text-primary-700 hover:bg-primary-50 px-4 py-2 rounded-xl transition-colors">
+                                Submit Claim
+                            </Link>
+                        </div>
+
+                        {loadingClaims ? (
+                            <div className="space-y-4">
+                                {[1, 2].map(i => (
+                                    <div key={i} className="h-16 bg-gray-50 dark:bg-gray-800/50 rounded-2xl animate-pulse" />
+                                ))}
+                            </div>
+                        ) : claims.length === 0 ? (
+                            <div className="text-center py-10 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
+                                <Receipt className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                <p className="text-gray-500 font-medium">No claims found.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {claims.slice(0, 3).map((claim: any, idx: number) => (
+                                    <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/30 rounded-2xl group hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-xl flex items-center justify-center text-primary-600 shadow-sm">
+                                                <Briefcase className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold text-dark-950 dark:text-gray-50">{claim.title}</p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{claim.category?.name || 'General'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-black text-dark-950 dark:text-gray-50">S${claim.amount.toLocaleString()}</p>
+                                            <p className={`text-[10px] font-black uppercase tracking-widest ${
+                                                claim.status === 'approved' ? 'text-emerald-500' :
+                                                claim.status === 'rejected' ? 'text-rose-500' :
+                                                'text-amber-500'
+                                            }`}>{claim.status}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Upcoming Shifts */}
                     <div className="bg-white dark:bg-gray-900 rounded-[32px] p-8 border border-gray-100 dark:border-gray-800 shadow-xl shadow-gray-200/20 dark:shadow-gray-900/50">
                         <div className="flex items-center gap-4 mb-8">
                             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl">

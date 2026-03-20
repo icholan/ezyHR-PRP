@@ -20,17 +20,6 @@ class IR8ARecord(Base, IDMixin, TimestampMixin):
 
     __table_args__ = (UniqueConstraint("employment_id", "year_of_assessment", name="uq_ir8a_period"),)
 
-class ClaimApplication(Base, IDMixin, TimestampMixin):
-    __tablename__ = "claim_applications"
-
-    employment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("employments.id", ondelete="CASCADE"), nullable=False)
-    claim_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="pending")
-    approved_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    paid_in_period: Mapped[datetime.date] = mapped_column(Date, nullable=True)
-
 class WorkPass(Base, IDMixin, TimestampMixin):
     __tablename__ = "work_passes"
 

@@ -258,7 +258,7 @@ const KETEditor = () => {
                         <div className="mb-10">
                             <h3 className="text-xs font-bold uppercase border-b border-gray-400 mb-3 pb-1">Salary & Remuneration</h3>
                             <div className="grid grid-cols-2 gap-x-12 gap-y-4 text-sm mb-4">
-                                <p><span className="font-bold w-48 inline-block text-primary-700">Basic Monthly Salary:</span> SGD {terms.salary.basic_salary.toFixed(2)}</p>
+                                <p><span className="font-bold w-48 inline-block text-primary-700">Basic Monthly Salary:</span> S$ {terms.salary.basic_salary.toFixed(2)}</p>
                                 <p><span className="font-bold w-48 inline-block">Salary Period:</span> <span className="capitalize">{terms.salary.salary_period}</span></p>
                                 <p><span className="font-bold w-48 inline-block">Payment Mode:</span> <span className="capitalize">{terms.salary.payment_mode?.replace('_', ' ')}</span></p>
                                 <p><span className="font-bold w-48 inline-block">Overtime Eligibility:</span> {terms.salary.is_ot_eligible ? 'Yes' : 'No'}</p>
@@ -279,7 +279,7 @@ const KETEditor = () => {
                                                 <tr>
                                                     <th className="px-4 py-2 text-left">Component</th>
                                                     <th className="px-4 py-2 text-left">Category</th>
-                                                    <th className="px-4 py-2 text-right">Amount (SGD)</th>
+                                                    <th className="px-4 py-2 text-right">Amount (S$)</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-200">

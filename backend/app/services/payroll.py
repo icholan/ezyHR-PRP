@@ -13,6 +13,7 @@ from app.models.statutory import CPFRateConfig
 from app.models.payroll import SalaryStructure, PersonCPFSummary
 from app.models.leave import LeaveRequest, LeaveType
 from app.models.attendance import MonthlyOTSummary
+from app.models.claims import ClaimRequest
 from app.services.leave import LeaveService
 from app.services.audit import AuditService
 import calendar
@@ -284,6 +285,26 @@ class PayrollService:
                         "amount": float(aws_amount)
                     })
 
+            # 2.9 Fetch Approved Claims for Reimbursement
+            claim_stmt = select(ClaimRequest).where(
+                ClaimRequest.employment_id == emp.id,
+                ClaimRequest.status == "approved", # Only approved, not yet paid
+                ClaimRequest.payroll_run_id == None
+            )
+            claims_res = await db.execute(claim_stmt)
+            claims = claims_res.scalars().all()
+            reimbursement_total = Decimal("0")
+            
+            for claim in claims:
+                reimbursement_total += Decimal(str(claim.amount))
+                breakdown["allowances"].append({
+                    "name": f"Claim: {claim.title}",
+                    "amount": float(claim.amount)
+                })
+                # Link claim to this payroll run
+                claim.payroll_run_id = run.id
+                claim.status = "paid"
+
             # 3. Execution
             calc_result = payroll_engine.calculate_employee_payroll(
                 basic_salary=emp.basic_salary,
@@ -319,7 +340,8 @@ class PayrollService:
                 cpf_ma=alloc_split.get("ma", 0),
                 shg_deduction=calc_result["deductions"]["shg"],
                 sdl_contribution=calc_result["contributions"]["sdl"],
-                net_salary=calc_result["summary"]["net_pay"],
+                net_salary=calc_result["summary"]["net_pay"] + float(reimbursement_total),
+                claims_reimbursement=float(reimbursement_total),
                 other_deductions=float(deductions_total),
                 fixed_allowances=float(allowances_total),
                 breakdown={

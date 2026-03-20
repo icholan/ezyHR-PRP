@@ -44,6 +44,9 @@ import ESSDashboard from './pages/ESSDashboard';
 import MyProfile from './pages/MyProfile';
 import MyLeaves from './pages/MyLeaves';
 import MyPayslips from './pages/MyPayslips';
+import MyClaims from './pages/Claims/MyClaims';
+import TeamClaims from './pages/Claims/TeamClaims';
+import ClaimsAdmin from './pages/Claims/ClaimsAdmin';
 import { useAuthStore } from './store/useAuthStore';
 
 const TenantIndexRedirect = () => {
@@ -73,6 +76,7 @@ function App() {
                     <Route path="me/payslips/:record_id" element={<Payslip />} />
                     <Route path="leave" element={<Navigate to="/leave/my" replace />} />
                     <Route path="leave/my" element={<MyLeaves />} />
+                    <Route path="claims/my" element={<MyClaims />} />
                     <Route path="attendance/clock" element={<TimeClock />} />
                     <Route path="attendance/history" element={<PunchHistory />} />
 
@@ -95,6 +99,8 @@ function App() {
                         <Route path="attendance/import" element={<ImportTimesheet />} />
                         <Route path="attendance/public-holidays" element={<PublicHolidays />} />
                         <Route path="audit" element={<AuditTrail />} />
+                        <Route path="claims/admin" element={<ClaimsAdmin />} />
+                        <Route path="claims/team" element={<TeamClaims />} />
                         <Route path="reports" element={<Reports />} />
                         <Route path="settings/users" element={<UserSettings />} />
                         <Route path="settings/entities" element={<EntityManagement />} />

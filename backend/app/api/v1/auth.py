@@ -142,15 +142,29 @@ async def login(
     
     if user.is_tenant_admin:
         entity_result = await db.execute(
-            select(Entity).where(Entity.tenant_id == user.tenant_id).limit(1)
+            select(Entity).where(
+                Entity.tenant_id == user.tenant_id,
+                Entity.is_active == True
+            ).limit(1)
         )
         entity = entity_result.scalar_one_or_none()
     elif user.entity_access:
-        # Use the first entity they have access to as default
+        # Find the first active entity they have access to
+        access_entity_ids = [a.entity_id for a in user.entity_access]
         entity_result = await db.execute(
-            select(Entity).where(Entity.id == user.entity_access[0].entity_id).limit(1)
+            select(Entity).where(
+                Entity.id.in_(access_entity_ids),
+                Entity.is_active == True
+            ).limit(1)
         )
         entity = entity_result.scalar_one_or_none()
+        
+        # Fallback to the first available entity if no active ones are found (unlikely)
+        if not entity:
+            entity_result = await db.execute(
+                select(Entity).where(Entity.id == user.entity_access[0].entity_id).limit(1)
+            )
+            entity = entity_result.scalar_one_or_none()
     else:
         entity = None
     

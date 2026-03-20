@@ -156,3 +156,29 @@ AI Audit Panel: Enhancing the "Process" flow so that HR Admins see an "Audit" re
 
 Does this "Generation & Compliance" roadmap look correct to you? If so, I'll start with the YTD tracking infrastructure.
 
+
+
+
+Based on our recent progress, we have successfully stabilized the Users API, finalized the Dynamic Employee Access logic, and refined the Multi-Entity Header display.
+
+Since you are currently looking at the Login Page, here are a few suggestions for what we can tackle next:
+
+1. Finalize "Implementations in Progress"
+There are a couple of modules that are implementationally complete but still need final verification:
+
+Timesheet Import Verification: Test the Excel/CSV import flow with various data scenarios (valid shifts, overlapping punches, invalid formats).
+Audit Trail Stress Test: Verify pagination and filtering efficiency with a high volume of audit logs.
+2. New ESS (Employee Self-Service) Features
+We have robust Leave and Payslip modules. We could expand the employee portal with:
+
+My Timesheets / Attendance Records: Allow employees to see their calculated hours, lateness, and early exits directly on their dashboard.
+Shift Calendar: A visual calendar view for employees to see their upcoming rosters.
+3. Statutory & Financial Enhancements
+GIRO Bank File Generation: While the backend service exists, we can implement the UI in the Statutory Reporting page to allow HR managers to download GIRO files for bulk salary payments.
+IR8A Finalization: Ensuring the AIS (Auto-Inclusion Scheme) XML generation handles all IRAS requirements for the 2026 tax season.
+4. User Experience & Aesthetics
+Login Page Enhancements: Since you're on 
+
+Login.tsx
+, we could implement a proper MFA Setup Flow (QR code generation for first-time setup) or refine the Password Reset journey.
+Live Dashboard Charts: Add more interactive visualizations to the Admin Overview, such as "Departmental Cost Distribution" or "Leave Trend Analysis".

@@ -36,7 +36,7 @@ const Employees = () => {
     const [filterGrade, setFilterGrade] = useState('');
 
     const user = useAuthStore((state) => state.user);
-    const entityId = user?.selected_entity_id || '00000000-0000-0000-0000-000000000000';
+    const entityId = user?.selected_entity_id || user?.entity_access?.[0]?.entity_id || '00000000-0000-0000-0000-000000000000';
 
     useEffect(() => {
         const fetchEmployees = async () => {
