@@ -1,14 +1,14 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-from app.models.employment import Person, Employment, BankAccount, Department, Group, Grade
+from app.models.employment import Person, Employment, BankAccount, Department, Group, Grade, PersonDocument
 from app.models.payroll import SalaryStructure
 from app.models.auth import User, Role, UserEntityAccess
 from app.core.security.auth import get_password_hash
 from app.schemas.employee import (
     EmployeeFullCreate, EmployeeSummary, EmployeeFullUpdate,
     EmployeeDetail, EmployeeDetailPerson, EmployeeDetailEmployment, EmployeeDetailBank,
-    SalaryComponentRead, PersonRead
+    SalaryComponentRead, PersonRead, PersonDocumentRead
 )
 from app.core.security.encryption import encryptor
 from datetime import date
@@ -318,11 +318,21 @@ class EmployeeService:
             for sc in sc_result.scalars().all()
         ]
 
+        # Fetch documents
+        doc_result = await self.db.execute(
+            select(PersonDocument).where(PersonDocument.person_id == person.id, PersonDocument.is_active == True)
+        )
+        documents = [
+            PersonDocumentRead.model_validate(pd)
+            for pd in doc_result.scalars().all()
+        ]
+
         return EmployeeDetail(
             person=person_detail,
             employment=employment_detail,
             bank_account=bank_detail,
-            salary_components=salary_components
+            salary_components=salary_components,
+            documents=documents
         )
 
     async def update_employee(self, employment_id: uuid.UUID, data: EmployeeFullUpdate, user_id: uuid.UUID = None, ip_address: str = None) -> Optional[EmployeeDetail]:
@@ -427,6 +437,26 @@ class EmployeeService:
                     end_date=comp.end_date
                 )
                 self.db.add(sc)
+
+        # Update Documents
+        if data.documents is not None:
+            # Simple sync: delete all and re-add
+            from sqlalchemy import delete
+            await self.db.execute(
+                delete(PersonDocument).where(PersonDocument.person_id == person.id)
+            )
+            for doc in data.documents:
+                pd = PersonDocument(
+                    person_id=person.id,
+                    document_type=doc.document_type,
+                    document_number=doc.document_number,
+                    expiry_date=doc.expiry_date,
+                    issue_date=doc.issue_date,
+                    issuing_country=doc.issuing_country,
+                    remarks=doc.remarks,
+                    is_active=doc.is_active
+                )
+                self.db.add(pd)
 
         try:
             await self.db.commit()

@@ -95,20 +95,33 @@ interface SalaryComponent {
     end_date?: string | null;
 }
 
+interface PersonDocument {
+    id?: string;
+    document_type: string;
+    document_number: string;
+    expiry_date: string;
+    issue_date?: string | null;
+    issuing_country?: string | null;
+    remarks?: string | null;
+    is_active: boolean;
+}
+
 interface EmployeeData {
     person: PersonDetail;
     employment: EmploymentDetail;
     bank_account: BankDetail | null;
     salary_components: SalaryComponent[];
+    documents: PersonDocument[];
 }
 
-type TabId = 'overview' | 'employment' | 'financial' | 'leave';
+type TabId = 'overview' | 'employment' | 'financial' | 'leave' | 'documents';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: 'overview', label: 'Overview', icon: User },
     { id: 'employment', label: 'Employment', icon: Briefcase },
     { id: 'financial', label: 'Financial', icon: CreditCard },
     { id: 'leave', label: 'Leave Balances', icon: Calendar },
+    { id: 'documents', label: 'Documents', icon: Shield },
 ];
 
 
@@ -161,6 +174,7 @@ const EmployeeProfile = () => {
     const [editPerson, setEditPerson] = useState<Partial<PersonDetail>>({});
     const [editEmployment, setEditEmployment] = useState<Partial<EmploymentDetail>>({});
     const [editSalaryComponents, setEditSalaryComponents] = useState<SalaryComponent[]>([]);
+    const [editDocuments, setEditDocuments] = useState<PersonDocument[]>([]);
 
     // Master data
     const [departments, setDepartments] = useState<any[]>([]);
@@ -247,6 +261,7 @@ const EmployeeProfile = () => {
         setEditPerson({ ...data.person });
         setEditEmployment({ ...data.employment });
         setEditSalaryComponents([...(data.salary_components || [])]);
+        setEditDocuments([...(data.documents || [])]);
         setEditing(true);
     };
 
@@ -255,6 +270,210 @@ const EmployeeProfile = () => {
         setEditPerson({});
         setEditEmployment({});
         setEditSalaryComponents([]);
+        setEditDocuments([]);
+    };
+
+    const DOCUMENT_TYPES = [
+        'NRIC', 'FIN', 'Passport', 'S Pass', 'Employement Pass', 'Driving Licence', 'Others'
+    ];
+
+    const renderDocumentsTab = () => {
+        const docs = editing ? editDocuments : data?.documents || [];
+
+        return (
+            <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 className="text-xl font-bold text-dark-950 dark:text-gray-50">Employee Documents</h2>
+                        <p className="text-sm text-gray-400 dark:text-gray-500">Track and manage employee identification and work documents.</p>
+                    </div>
+                    {editing && (
+                        <button
+                            onClick={() => setEditDocuments([...editDocuments, { 
+                                document_type: 'NRIC', 
+                                document_number: '', 
+                                expiry_date: new Date().toISOString().split('T')[0], 
+                                is_active: true 
+                            }])}
+                            className="btn btn-secondary flex items-center gap-2"
+                        >
+                            <Plus size={18} />
+                            Add Document
+                        </button>
+                    )}
+                </div>
+
+                <div className="grid gap-4">
+                    {docs.length === 0 ? (
+                        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/20 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                            <Shield className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-4" />
+                            <p className="text-gray-500 dark:text-gray-400 text-lg">No documents added yet</p>
+                            {editing && (
+                                <p className="text-sm text-gray-400 mt-1">Click "Add Document" to start tracking</p>
+                            )}
+                        </div>
+                    ) : (
+                        docs.map((doc, idx) => {
+                            const isExpired = new Date(doc.expiry_date) < new Date();
+                            const isExpiringSoon = !isExpired && new Date(doc.expiry_date).getTime() < (Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+                            return (
+                                <div key={idx} className={clsx(
+                                    "p-5 rounded-2xl border transition-all duration-300",
+                                    isExpired ? "bg-red-50/50 dark:bg-red-950/10 border-red-100 dark:border-red-900/30" :
+                                    isExpiringSoon ? "bg-amber-50/50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/30" :
+                                    "bg-gray-50/50 dark:bg-gray-800/30 border-gray-100 dark:border-gray-800"
+                                )}>
+                                    <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-6 items-end">
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Document Type</label>
+                                            {editing ? (
+                                                <select
+                                                    value={doc.document_type}
+                                                    onChange={(e) => {
+                                                        const newDocs = [...editDocuments];
+                                                        newDocs[idx].document_type = e.target.value;
+                                                        setEditDocuments(newDocs);
+                                                    }}
+                                                    className="input-field"
+                                                >
+                                                    {DOCUMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+                                            ) : (
+                                                <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl px-4 py-3 min-h-[48px] border border-gray-100 dark:border-gray-700/50">
+                                                    <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{doc.document_type}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2 md:col-span-1">
+                                            <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Document Number</label>
+                                            {editing ? (
+                                                <input
+                                                    type="text"
+                                                    value={doc.document_number}
+                                                    onChange={(e) => {
+                                                        const newDocs = [...editDocuments];
+                                                        newDocs[idx].document_number = e.target.value;
+                                                        setEditDocuments(newDocs);
+                                                    }}
+                                                    className="input-field"
+                                                    placeholder="Enter number"
+                                                />
+                                            ) : (
+                                                <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl px-4 py-3 min-h-[48px] border border-gray-100 dark:border-gray-700/50">
+                                                    <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{doc.document_number}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Expiry Date</label>
+                                            {editing ? (
+                                                <input
+                                                    type="date"
+                                                    value={doc.expiry_date}
+                                                    onChange={(e) => {
+                                                        const newDocs = [...editDocuments];
+                                                        newDocs[idx].expiry_date = e.target.value;
+                                                        setEditDocuments(newDocs);
+                                                    }}
+                                                    className="input-field"
+                                                />
+                                            ) : (
+                                                <div className={clsx(
+                                                    "flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl px-4 py-3 min-h-[48px] border",
+                                                    isExpired ? "border-red-200 dark:border-red-900/50" : 
+                                                    isExpiringSoon ? "border-amber-200 dark:border-amber-900/50" : 
+                                                    "border-gray-100 dark:border-gray-700/50"
+                                                )}>
+                                                    <Calendar size={16} className={clsx(
+                                                        isExpired ? "text-red-500" : isExpiringSoon ? "text-amber-500" : "text-gray-400"
+                                                    )} />
+                                                    <span className={clsx(
+                                                        "text-sm font-medium",
+                                                        isExpired ? "text-red-600 dark:text-red-400" : 
+                                                        isExpiringSoon ? "text-amber-600 dark:text-amber-400" : 
+                                                        "text-dark-950 dark:text-gray-100"
+                                                    )}>{doc.expiry_date}</span>
+                                                    {isExpired && (
+                                                        <span className="ml-auto text-[10px] font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full uppercase tracking-wider border border-red-200 dark:border-red-800/50">
+                                                            Expired
+                                                        </span>
+                                                    )}
+                                                    {isExpiringSoon && (
+                                                        <span className="ml-auto text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full uppercase tracking-wider border border-amber-200 dark:border-amber-800/50">
+                                                            Expiring
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2 lg:col-span-1">
+                                            <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Issuing Country</label>
+                                            {editing ? (
+                                                <input
+                                                    type="text"
+                                                    value={doc.issuing_country || ''}
+                                                    onChange={(e) => {
+                                                        const newDocs = [...editDocuments];
+                                                        newDocs[idx].issuing_country = e.target.value;
+                                                        setEditDocuments(newDocs);
+                                                    }}
+                                                    className="input-field"
+                                                    placeholder="e.g. Singapore"
+                                                />
+                                            ) : (
+                                                <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-xl px-4 py-3 min-h-[48px] border border-gray-100 dark:border-gray-700/50">
+                                                    <span className="text-sm font-medium text-dark-950 dark:text-gray-100">{doc.issuing_country || '—'}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {editing && (
+                                            <button
+                                                onClick={() => {
+                                                    const newDocs = [...editDocuments];
+                                                    newDocs.splice(idx, 1);
+                                                    setEditDocuments(newDocs);
+                                                }}
+                                                className="p-3 text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 rounded-xl hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors"
+                                            >
+                                                <Trash2 size={20} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="mt-6">
+                                        <label className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2 block">Remarks</label>
+                                        {editing ? (
+                                            <textarea
+                                                value={doc.remarks || ''}
+                                                onChange={(e) => {
+                                                    const newDocs = [...editDocuments];
+                                                    newDocs[idx].remarks = e.target.value;
+                                                    setEditDocuments(newDocs);
+                                                }}
+                                                rows={1}
+                                                className="input-field py-3 min-h-[48px] resize-none"
+                                                placeholder="Add additional notes..."
+                                            />
+                                        ) : (
+                                            <div className="bg-white/50 dark:bg-gray-800/20 rounded-xl px-4 py-3 border border-gray-100 dark:border-gray-700/50">
+                                                <p className="text-sm text-gray-600 dark:text-gray-400 italic">
+                                                    {doc.remarks || 'No remarks provided.'}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+        );
     };
 
     const handleSave = async () => {
@@ -304,6 +523,16 @@ const EmployeeProfile = () => {
                 is_cpf_liable: sc.is_cpf_liable,
                 effective_date: sc.effective_date,
                 end_date: sc.end_date
+            }));
+
+            payload.documents = editDocuments.map(doc => ({
+                document_type: doc.document_type,
+                document_number: doc.document_number,
+                expiry_date: doc.expiry_date,
+                issue_date: doc.issue_date,
+                issuing_country: doc.issuing_country,
+                remarks: doc.remarks,
+                is_active: doc.is_active
             }));
 
             const resp = await api.put(`/api/v1/employees/${id}`, payload);
@@ -1043,6 +1272,8 @@ const EmployeeProfile = () => {
                         )}
                     </div>
                 )}
+
+                {activeTab === 'documents' && renderDocumentsTab()}
             </div>
 
             {/* Deactivate Confirmation Modal */}
@@ -1234,9 +1465,10 @@ const EmployeeProfile = () => {
                     </div>
                 </div>
             )}
-        </div >
+        </div>
     );
 };
+
 
 /* ── Reusable Field Components ─────────────────────── */
 

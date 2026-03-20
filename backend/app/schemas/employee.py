@@ -199,6 +199,25 @@ class SalaryComponentRead(BaseModel):
     class Config:
         from_attributes = True
 
+class PersonDocumentBase(BaseModel):
+    document_type: str
+    document_number: str
+    expiry_date: date
+    issue_date: Optional[date] = None
+    issuing_country: Optional[str] = None
+    remarks: Optional[str] = None
+    is_active: bool = True
+
+class PersonDocumentCreate(PersonDocumentBase):
+    pass
+
+class PersonDocumentRead(PersonDocumentBase):
+    id: uuid.UUID
+    person_id: uuid.UUID
+
+    class Config:
+        from_attributes = True
+
 class SalaryComponentCreateLocal(BaseModel):
     component: str
     amount: float
@@ -213,6 +232,7 @@ class EmployeeDetail(BaseModel):
     employment: EmployeeDetailEmployment
     bank_account: Optional[EmployeeDetailBank] = None
     salary_components: List[SalaryComponentRead] = []
+    documents: List[PersonDocumentRead] = []
 
 class EmployeeFullCreate(BaseModel):
     person_id: Optional[uuid.UUID] = None
@@ -226,3 +246,4 @@ class EmployeeFullUpdate(BaseModel):
     employment: Optional[EmploymentUpdate] = None
     bank_account: Optional[BankAccountCreate] = None
     salary_components: Optional[List[SalaryComponentCreateLocal]] = None
+    documents: Optional[List[PersonDocumentCreate]] = None

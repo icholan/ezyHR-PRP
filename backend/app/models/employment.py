@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 import uuid
+from typing import List
 from .base import Base, IDMixin, TimestampMixin
 
 class Person(Base, IDMixin, TimestampMixin):
@@ -33,7 +34,24 @@ class Person(Base, IDMixin, TimestampMixin):
     emergency_contact_relationship: Mapped[str] = mapped_column(String(100), nullable=True)
     emergency_contact_number: Mapped[str] = mapped_column(String(20), nullable=True)
 
+    documents: Mapped[List["PersonDocument"]] = relationship("PersonDocument", back_populates="person", cascade="all, delete-orphan")
+
     __table_args__ = (UniqueConstraint("tenant_id", "nric_fin_hash", name="uq_persons_nric"),)
+
+class PersonDocument(Base, IDMixin, TimestampMixin):
+    __tablename__ = "person_documents"
+
+    person_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("persons.id", ondelete="CASCADE"), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # nric | fin | passport | s_pass | ep | driving_licence | others
+    document_number: Mapped[str] = mapped_column(String(100), nullable=False)
+    expiry_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    issue_date: Mapped[datetime.date] = mapped_column(Date, nullable=True)
+    issuing_country: Mapped[str] = mapped_column(String(100), nullable=True)
+    remarks: Mapped[str] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    person: Mapped["Person"] = relationship("Person", back_populates="documents")
 
 class Department(Base, IDMixin, TimestampMixin):
     __tablename__ = "departments"
